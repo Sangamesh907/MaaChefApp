@@ -1,40 +1,46 @@
-// screens/OrderDetailsScreen.js
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 
 export default function OrderDetailsScreen({ route }) {
-  const { order } = route.params;
+  const order = route?.params?.order;
+
+  if (!order) return <Text style={{ padding: 20 }}>Order data not available</Text>;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Order #{order.id}</Text>
+      <Text style={styles.header}>Order #{order.id || 'N/A'}</Text>
 
       <View style={styles.box}>
-        <Text style={styles.name}>{order.name}</Text>
-        <Text style={styles.time}>{order.time}</Text>
-        <Text style={styles.cuisine}>Cuisine: <Text style={styles.cuisineValue}>{order.cuisine}</Text></Text>
+        <Text style={styles.name}>{order.name || 'Unknown'}</Text>
+        <Text style={styles.time}>{order.time || '-'}</Text>
+        <Text style={styles.cuisine}>
+          Cuisine: <Text style={styles.cuisineValue}>{order.cuisine || '-'}</Text>
+        </Text>
       </View>
 
       <Text style={styles.subheading}>Order Details</Text>
 
       <View style={styles.orderBox}>
-        <Text style={styles.rowText}>Dosa x 1 ₹60</Text>
-        <Text style={styles.rowText}>Idly x 1 ₹60</Text>
+        {(order.items || []).map((item, idx) => (
+          <Text key={idx} style={styles.rowText}>
+            {item.name || '-'} x {item.quantity || 1} ₹{item.price || 0}
+          </Text>
+        ))}
         <View style={styles.divider} />
-        <Text>Subtotal ₹120</Text>
-        <Text>Promo -₹75</Text>
-        <Text>Delivery ₹25</Text>
-        <Text>Tax ₹25</Text>
+        <Text>Subtotal ₹{order.subtotal || 0}</Text>
+        <Text>Promo -₹{order.promo || 0}</Text>
+        <Text>Delivery ₹{order.delivery || 0}</Text>
+        <Text>Tax ₹{order.tax || 0}</Text>
         <View style={styles.divider} />
-        <Text style={styles.total}>Total ₹120</Text>
-        <Text style={styles.savings}>Your Total Savings ₹75</Text>
+        <Text style={styles.total}>Total ₹{order.total || 0}</Text>
+        <Text style={styles.savings}>Your Total Savings ₹{order.savings || 0}</Text>
       </View>
 
       <View style={styles.footerButtons}>
-        <TouchableOpacity style={styles.reject}>
+        <TouchableOpacity style={styles.reject} onPress={() => Alert.alert('Order Rejected')}>
           <Text style={styles.rejectText}>Reject Order</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.accept}>
+        <TouchableOpacity style={styles.accept} onPress={() => Alert.alert('Order Accepted')}>
           <Text style={styles.acceptText}>Accept Order</Text>
         </TouchableOpacity>
       </View>

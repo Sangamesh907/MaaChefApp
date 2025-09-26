@@ -1,84 +1,142 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useContext } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  SafeAreaView,
+} from "react-native";
+import { ChefContext } from "../context/ChefContext";
+import { updateChefFoodStyle } from "../services/foodStyleService";
 
-const SELECTED_BG_COLOR = '#E0F2F1';
-const SELECTED_TEXT_COLOR = '#00796B';
-const UNSELECTED_TEXT_COLOR = '#111';
-const UNSELECTED_BORDER_COLOR = '#333333';
-const DECO_GREEN_COLOR = '#009688';
-const DECO_PURPLE_COLOR = '#673AB7';
+// Colors
+const SELECTED_BG_COLOR = "#E0F2F1";
+const SELECTED_TEXT_COLOR = "#00796B";
+const UNSELECTED_TEXT_COLOR = "#111";
+const UNSELECTED_BORDER_COLOR = "#ccc";
+const DECO_GREEN_COLOR = "#009688";
+const DECO_PURPLE_COLOR = "#673AB7";
 
-const AddFoodStyleScreen = ({ navigation, route }) => {
-  const initial = route?.params?.selectedFoodStyle || '';
-  const [selectedFoodStyle, setSelectedFoodStyle] = useState(initial);
-  const [foodStyles, setFoodStyles] = useState([]);
-  const [loading, setLoading] = useState(true);
+// ✅ Static list of food styles
+const STATIC_FOOD_STYLES = [
+  "Andhra Style","Arunachal Pradesh Style","Assam Style","Bihar Style",
+  "Chattisgarh Style","Delhi Style","Goa Style","Gujarat Style","Haryana Style",
+  "Himachal Pradesh Style","Jammu Kashmir Style","Jharkhand Style","Karnataka Style",
+  "Kerala Style","Madhya Pradesh Style","Maharastrian Style","Meghalaya Style",
+  "Mizoram Style","Nagaland Style","Orissa Style","Punjabi Style","Rajasthan Style",
+  "Sikkim Style","Tamilian Style","Telangana Style","Tripura Style","Uttrakhand Style",
+  "Uttar Pradesh Style","West Bengal Style"
+];
 
-  useEffect(() => {
-    const fetchFoodStyles = async () => {
-      try {
-        const response = await fetch('http://13.204.84.41/api/food-styles');
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
-        if (!Array.isArray(data) || data.length === 0) {
-          Alert.alert("No data", "The API returned an empty list.");
-          setFoodStyles([]);
-          return;
-        }
-        const stylesArray = data.map(item => ({ label: item }));
-        setFoodStyles(stylesArray);
-      } catch (error) {
-        console.error("Error fetching food styles:", error);
-        Alert.alert('Error', `Unable to load food styles: ${error.message}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFoodStyles();
-  }, []);
+const AddFoodStyleScreen = ({ navigation }) => {
+  const { chefData, updateChef, token } = useContext(ChefContext);
 
-  const handleSelectAndSave = (style) => {
+  const [selectedFoodStyle, setSelectedFoodStyle] = useState(
+    chefData?.food_styles?.[0] || ""
+  );
+
+  const handleSelectAndSave = async (style) => {
     setSelectedFoodStyle(style);
-    if (route.params?.onSelectFoodStyle) route.params.onSelectFoodStyle(style);
-    setTimeout(() => navigation.goBack(), 200);
+
+    if (!chefData?.id || !token) {
+      Alert.alert("Error", "Chef not logged in properly.");
+      return;
+    }
+
+    try {
+      // Send as array to backend
+      const result = await updateChefFoodStyle([style], token);
+
+      // Update context as array
+      updateChef({ food_styles: [style] });
+
+      Alert.alert("Success", "Food style updated.");
+      navigation.navigate("EditProfile", { updatedFoodStyle: [style] });
+    } catch (err) {
+      console.error("Update error:", err);
+      Alert.alert("Error", "Unable to update food style.");
+    }
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {STATIC_FOOD_STYLES.map((style, index) => {
+          const selected = selectedFoodStyle === style;
+          return (
+            <TouchableOpacity
+              key={index}
+              style={[styles.item, selected && styles.itemSelected]}
+              onPress={() => handleSelectAndSave(style)}
+            >
+              <Text style={[styles.itemText, selected && styles.itemTextSelected]}>
+                {style}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Decorative Circles */}
       <View style={styles.greenCircle} />
       <View style={styles.purpleCircle} />
-
-      {loading ? (
-        <ActivityIndicator size="large" color={DECO_GREEN_COLOR} style={{ marginTop: 50 }} />
-      ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {foodStyles.map((item, index) => {
-            const selected = selectedFoodStyle === item.label;
-            return (
-              <TouchableOpacity
-                key={index}
-                style={[styles.item, selected && styles.itemSelected]}
-                onPress={() => handleSelectAndSave(item.label)}
-              >
-                <Text style={[styles.itemText, selected && styles.itemTextSelected]}>{item.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      )}
-    </View>
+    </SafeAreaView>
   );
 };
 
-export default AddFoodStyleScreen;
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', position: 'relative' },
-  scrollContent: { flexDirection: 'row', flexWrap: 'wrap', padding: 16, paddingTop: 24 },
-  item: { borderWidth: 1, borderColor: UNSELECTED_BORDER_COLOR, borderRadius: 50, paddingVertical: 10, paddingHorizontal: 20, margin: 6, backgroundColor: '#fff' },
-  itemSelected: { backgroundColor: SELECTED_BG_COLOR, borderColor: SELECTED_BG_COLOR },
-  itemText: { fontSize: 14, color: UNSELECTED_TEXT_COLOR, fontWeight: '500' },
-  itemTextSelected: { color: SELECTED_TEXT_COLOR, fontWeight: '600' },
-  greenCircle: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: DECO_GREEN_COLOR, top: '45%', left: -120, opacity: 0.8 },
-  purpleCircle: { position: 'absolute', width: 320, height: 350, borderRadius: 200, backgroundColor: DECO_PURPLE_COLOR, bottom: -220, right: -150, opacity: 0.9 },
+  container: { flex: 1, backgroundColor: "#fff", position: "relative" },
+  scrollContent: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 40,
+  },
+  item: {
+    borderWidth: 1,
+    borderColor: UNSELECTED_BORDER_COLOR,
+    borderRadius: 50,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    margin: 6,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  itemSelected: {
+    backgroundColor: SELECTED_BG_COLOR,
+    borderColor: SELECTED_BG_COLOR,
+    shadowOpacity: 0.3,
+    elevation: 5,
+  },
+  itemText: { fontSize: 14, color: UNSELECTED_TEXT_COLOR, fontWeight: "500" },
+  itemTextSelected: { color: SELECTED_TEXT_COLOR, fontWeight: "600" },
+  greenCircle: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: DECO_GREEN_COLOR,
+    top: "40%",
+    left: -90,
+    opacity: 0.15,
+  },
+  purpleCircle: {
+    position: "absolute",
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: DECO_PURPLE_COLOR,
+    bottom: -140,
+    right: -120,
+    opacity: 0.12,
+  },
 });
+
+export default AddFoodStyleScreen;

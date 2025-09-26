@@ -1,66 +1,76 @@
-// MenuScreen.js
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useState, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  Image, FlatList, Modal, Pressable, Switch, Alert, Platform
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  FlatList,
+  Modal,
+  Pressable,
+  Switch,
+  Platform,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ChefContext } from '../context/ChefContext';
+import {
+  toggleMenuItemStatus,
+  deleteMenuItem,
+  deleteAllMenuItems,
+} from '../services/menuService';
+import { getChefProfile } from '../services/chefService';
 
 export default function MenuScreen() {
   const navigation = useNavigation();
-  const [menuItems, setMenuItems] = useState([]);
-  const [filteredItems, setFilteredItems] = useState([]);
+  const {
+    chefData,
+    token,
+    updateChef,
+    addMenuItem,
+    updateMenuItem,
+    fetchChefData,
+  } = useContext(ChefContext);
+
   const [selectedServiceType, setSelectedServiceType] = useState('Breakfast');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [chefFoodStyle, setChefFoodStyle] = useState('My Style');
 
+  const serviceTypes = ['Breakfast', 'Lunch', 'Dinner'];
+
+  // ✅ Refresh menu whenever screen is focused
   useFocusEffect(
     React.useCallback(() => {
-      loadChefFoodStyle();
-      loadSelectedServiceType();
-    }, [])
+      if (token) fetchChefData?.();
+    }, [token])
   );
 
-  useEffect(() => {
-    loadItems();
-  }, [selectedServiceType]);
+  // ✅ Filter items by service type
+  const filteredItems = useMemo(() => {
+    const menuItems = Array.isArray(chefData?.menuItems) ? chefData.menuItems : [];
+    return menuItems.filter(item => item.service_type === selectedServiceType);
+  }, [chefData?.menuItems, selectedServiceType]);
 
-  const loadChefFoodStyle = async () => {
-    const style = await AsyncStorage.getItem('chef_food_style');
-    if (style) setChefFoodStyle(style);
-  };
+  // ✅ Toggle availability with rollback
+  const handleToggleStatus = async (itemId) => {
+    const originalItem = chefData?.menuItems?.find(i => i.id === itemId);
+    if (!originalItem) return;
 
-  const loadSelectedServiceType = async () => {
-    const savedType = await AsyncStorage.getItem('selected_service_type');
-    if (savedType) {
-      setSelectedServiceType(savedType);
-    } else {
-      setSelectedServiceType('Breakfast');
+    // Optimistic update
+    updateChef({
+      menuItems: chefData.menuItems.map(item =>
+        item.id === itemId ? { ...item, is_available: !item.is_available } : item
+      ),
+    });
+
+    try {
+      await toggleMenuItemStatus(itemId, !originalItem.is_available, token);
+    } catch (error) {
+      // rollback
+      updateChef({ menuItems: chefData.menuItems });
+      Alert.alert('Error', 'Failed to update item status.');
     }
-  };
-
-  const loadItems = async () => {
-    const stored = await AsyncStorage.getItem('menu_items');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      setMenuItems(parsed);
-      const filtered = parsed.filter(item => item.serviceType === selectedServiceType);
-      setFilteredItems(filtered);
-    }
-  };
-
-  const saveItems = async (items) => {
-    await AsyncStorage.setItem('menu_items', JSON.stringify(items));
-    loadItems();
-  };
-
-  const toggleStatus = (index) => {
-    const updated = [...menuItems];
-    updated[index].isAvailable = !updated[index].isAvailable;
-    saveItems(updated);
   };
 
   const openContextMenu = (item) => {
@@ -68,103 +78,131 @@ export default function MenuScreen() {
     setModalVisible(true);
   };
 
-  const deleteItem = () => {
-    const filtered = menuItems.filter(i => i !== selectedItem);
-    saveItems(filtered);
-    setModalVisible(false);
+  const handleDeleteItem = async () => {
+    if (!selectedItem) return;
+    try {
+      await deleteMenuItem(selectedItem.id, token);
+      updateChef({
+        menuItems: chefData.menuItems.filter(i => i.id !== selectedItem.id),
+      });
+      setModalVisible(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to delete item.');
+    }
   };
 
-  const deleteAll = () => {
+  const handleDeleteAll = () => {
     Alert.alert('Delete All', 'Are you sure you want to delete all items?', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete All', style: 'destructive',
+        text: 'Delete All',
+        style: 'destructive',
         onPress: async () => {
-          await AsyncStorage.removeItem('menu_items');
-          setMenuItems([]);
-          setFilteredItems([]);
-          setModalVisible(false);
-        }
-      }
+          try {
+            await deleteAllMenuItems(token);
+            updateChef({ menuItems: [] });
+            setModalVisible(false);
+            setSelectedItem(null);
+          } catch (error) {
+            console.error(error);
+            Alert.alert('Error', 'Failed to delete all items.');
+          }
+        },
+      },
     ]);
   };
 
   const renderItem = ({ item }) => (
     <View style={styles.itemCard}>
-      <Image source={{ uri: item.imageUri }} style={styles.itemImage} />
+      <Image source={{ uri: item.photo }} style={styles.itemImage} />
       <View style={{ flex: 1, marginLeft: 10 }}>
-        <Text style={styles.itemName}>{item.foodName}</Text>
+        <Text style={styles.itemName}>{item.food_name}</Text>
         <Text style={styles.itemDetail}>₹{item.price}</Text>
         <Text style={styles.itemDetail}>
-          {item.foodType} • Qty: {item.quantity}
+          {item.food_type} • Qty: {item.quantity}
         </Text>
-        <Text style={styles.itemDetail}>
-          ⭐ {item.rating} ({item.votes} votes)
-        </Text>
-        {item.offPrice ? (
-          <Text style={styles.discountText}>{item.offPrice}% OFF</Text>
-        ) : null}
+        {item.off_price ? <Text style={styles.discountText}>{item.off_price}% OFF</Text> : null}
       </View>
-
       <Switch
-        value={item.isAvailable}
-        onValueChange={() => toggleStatus(menuItems.findIndex(i => i === item))}
+        value={!!item.is_available}
+        onValueChange={() => handleToggleStatus(item.id)}
       />
-
       <TouchableOpacity onPress={() => openContextMenu(item)}>
         <Icon name="ellipsis-vertical" size={22} color="#555" style={{ paddingLeft: 10 }} />
       </TouchableOpacity>
     </View>
   );
 
-  const serviceTypes = ['Breakfast', 'Lunch', 'Snacks', 'Dinner'];
-
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerText}>Menu</Text>
         <View style={styles.subHeader}>
-          <Text style={styles.foodStyle}>{chefFoodStyle}</Text>
+          <Text style={styles.foodStyle}>
+            {Array.isArray(chefData?.food_styles) && chefData.food_styles.length > 0
+              ? chefData.food_styles.join(', ')
+              : 'My Style'}
+          </Text>
           <TouchableOpacity onPress={() => navigation.navigate('FilterScreen')}>
             <Icon name="options-outline" size={20} color="#750656" />
           </TouchableOpacity>
         </View>
-        <View style={styles.tabContainer}>
-          {serviceTypes.map(type => (
-            <TouchableOpacity
-              key={type}
-              style={[styles.tabButton, selectedServiceType === type && styles.activeTab]}
-              onPress={() => setSelectedServiceType(type)}
-            >
-              <Text style={[styles.tabText, selectedServiceType === type && styles.activeText]}>
-                {type}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
       </View>
 
+      {/* Location */}
+      <View style={styles.locationContainer}>
+        <Text style={{ fontWeight: '600', fontSize: 16 }}>📍 Your Location:</Text>
+        <Text style={{ fontSize: 14, color: '#555' }}>
+          {chefData?.location?.fullAddress || 'Location not set'}
+        </Text>
+      </View>
+
+      {/* Service Tabs */}
+      <View style={styles.tabContainer}>
+        {serviceTypes.map((type) => (
+          <TouchableOpacity
+            key={type}
+            style={[styles.tabButton, selectedServiceType === type && styles.activeTab]}
+            onPress={() => setSelectedServiceType(type)}
+          >
+            <Text style={[styles.tabText, selectedServiceType === type && styles.activeText]}>
+              {type}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Menu List */}
       {filteredItems.length === 0 ? (
         <View style={styles.centerContent}>
           <Image source={require('../assets/bowl.png')} style={styles.bowlImage} />
-          <Text style={styles.createText}>No items found under {selectedServiceType}</Text>
+          <Text style={styles.createText}>
+            No items found under {selectedServiceType}
+          </Text>
         </View>
       ) : (
         <FlatList
           data={filteredItems}
-          keyExtractor={(item, index) => index.toString()}
+          keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 20 }}
         />
       )}
 
+      {/* Add New Item FAB */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => navigation.navigate('AddNewItem', { serviceType: selectedServiceType })}
+        onPress={() =>
+          navigation.navigate('AddNewItem', { serviceType: selectedServiceType })
+        }
       >
         <Icon name="add" size={30} color="#fff" />
       </TouchableOpacity>
 
+      {/* Context Menu Modal */}
       <Modal visible={modalVisible} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View style={styles.modalBox}>
@@ -172,20 +210,16 @@ export default function MenuScreen() {
               style={styles.modalOption}
               onPress={() => {
                 setModalVisible(false);
-                const index = menuItems.findIndex(i => i === selectedItem);
-                navigation.navigate('AddNewItem', {
-                  editItem: selectedItem,
-                  editIndex: index,
-                });
+                navigation.navigate('AddNewItem', { editItem: selectedItem, serviceType: selectedServiceType });
               }}
             >
               <Text style={styles.modalText}>Edit</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.modalOption} onPress={deleteItem}>
+            <TouchableOpacity style={styles.modalOption} onPress={handleDeleteItem}>
               <Text style={styles.modalText}>Delete</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.modalOption} onPress={deleteAll}>
-              <Text style={[styles.modalText]}>Delete All</Text>
+            <TouchableOpacity style={styles.modalOption} onPress={handleDeleteAll}>
+              <Text style={styles.modalText}>Delete All</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -205,98 +239,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   headerText: { fontSize: 20, fontWeight: 'bold', color: '#000' },
-  subHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 6,
-    alignItems: 'center',
-  },
-  foodStyle: { color: '#750656', fontSize: 16, fontWeight: '600' },
-  tabContainer: {
-    flexDirection: 'row',
-    marginTop: 10,
-  },
-  tabButton: {
-    marginRight: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: '#eee',
-  },
-  activeTab: {
-    backgroundColor: '#750656',
-  },
-  tabText: { color: '#000' },
-  activeText: { color: '#fff', fontWeight: '600' },
+  subHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, alignItems: 'center' },
+  foodStyle: { fontSize: 14, color: '#750656', fontWeight: '500' },
+  locationContainer: { paddingHorizontal: 20, marginTop: 10 },
+  tabContainer: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 10 },
+  tabButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#F0F0F0' },
+  activeTab: { backgroundColor: '#0A3E73' },
+  tabText: { color: '#555', fontWeight: '500' },
+  activeText: { color: '#fff' },
   itemCard: {
     flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 15,
     backgroundColor: '#fff',
-    padding: 10,
+    padding: 12,
     borderRadius: 10,
-    elevation: 1,
     shadowColor: '#000',
     shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    alignItems: 'center',
+    shadowRadius: 5,
+    elevation: 2,
   },
-  itemImage: { width: 70, height: 70, borderRadius: 10 },
-  itemName: { fontWeight: 'bold', fontSize: 16, color: '#000' }, // Black color
-  itemDetail: { color: '#666', fontSize: 13 },
-  discountText: {
-    fontSize: 12,
-    color: '#E53935',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bowlImage: {
-    width: 160,
-    height: 160,
-    resizeMode: 'contain',
-    marginBottom: 10,
-  },
-  createText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 90,
-    right: 20,
-    backgroundColor: '#750656',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#00000060',
-  },
-  modalBox: {
-    width: 220,
-    backgroundColor: '#fff',
-    padding: 10,
-    borderRadius: 8,
-  },
-  modalOption: {
-    padding: 12,
-    borderBottomWidth: 0.5,
-    borderColor: '#ccc',
-  },
-  modalText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000', // Black color for modal text
-  },
+  itemImage: { width: 70, height: 70, borderRadius: 8 },
+  itemName: { fontSize: 16, fontWeight: '600' },
+  itemDetail: { fontSize: 14, color: '#555' },
+  discountText: { fontSize: 12, color: 'green', fontWeight: '500' },
+  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
+  bowlImage: { width: 150, height: 150, marginBottom: 10 },
+  createText: { fontSize: 16, color: '#888' },
+  fab: { position: 'absolute', bottom: 20, right: 20, backgroundColor: '#0A3E73', padding: 16, borderRadius: 30, elevation: 5 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  modalBox: { width: 250, backgroundColor: '#fff', borderRadius: 10, overflow: 'hidden' },
+  modalOption: { padding: 15, borderBottomWidth: 0.5, borderColor: '#ccc' },
+  modalText: { fontSize: 16, color: '#0A3E73', textAlign: 'center' },
 });
