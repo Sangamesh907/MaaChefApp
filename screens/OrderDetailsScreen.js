@@ -1,18 +1,43 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+// screens/OrderDetailsScreen.js
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import ChefService from "../services/api"; // ✅ default export
 
-export default function OrderDetailsScreen({ route }) {
+export default function OrderDetailsScreen({ route, navigation }) {
   const order = route?.params?.order;
+  const [loading, setLoading] = useState(false);
 
   if (!order) return <Text style={{ padding: 20 }}>Order data not available</Text>;
 
+  // Map button actions to backend valid statuses
+  const handleResponse = async (status) => {
+    // status should be one of: "chef_accepted", "preparing", "ready", "completed", "cancelled"
+    try {
+      setLoading(true);
+      const res = await ChefService.updateOrderStatus(order._id, status);
+
+      if (res.status === 'success') {
+        Alert.alert('Success', `Order marked as "${status}" successfully!`, [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else {
+        Alert.alert('Error', res.message || 'Failed to update order');
+      }
+    } catch (err) {
+      console.error('Error updating order:', err);
+      Alert.alert('Error', 'Something went wrong!');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Order #{order.id || 'N/A'}</Text>
+      <Text style={styles.header}>Order #{order._id || 'N/A'}</Text>
 
       <View style={styles.box}>
         <Text style={styles.name}>{order.name || 'Unknown'}</Text>
-        <Text style={styles.time}>{order.time || '-'}</Text>
+        <Text style={styles.time}>{order.created_at || '-'}</Text>
         <Text style={styles.cuisine}>
           Cuisine: <Text style={styles.cuisineValue}>{order.cuisine || '-'}</Text>
         </Text>
@@ -37,11 +62,20 @@ export default function OrderDetailsScreen({ route }) {
       </View>
 
       <View style={styles.footerButtons}>
-        <TouchableOpacity style={styles.reject} onPress={() => Alert.alert('Order Rejected')}>
-          <Text style={styles.rejectText}>Reject Order</Text>
+        <TouchableOpacity
+          style={styles.reject}
+          onPress={() => handleResponse('cancelled')}
+          disabled={loading}
+        >
+          {loading ? <ActivityIndicator color="#750656" /> : <Text style={styles.rejectText}>Cancel Order</Text>}
         </TouchableOpacity>
-        <TouchableOpacity style={styles.accept} onPress={() => Alert.alert('Order Accepted')}>
-          <Text style={styles.acceptText}>Accept Order</Text>
+
+        <TouchableOpacity
+          style={styles.accept}
+          onPress={() => handleResponse('chef_accepted')}
+          disabled={loading}
+        >
+          {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.acceptText}>Accept Order</Text>}
         </TouchableOpacity>
       </View>
     </View>
@@ -62,7 +96,6 @@ const styles = StyleSheet.create({
   cuisine: { marginTop: 5 },
   cuisineValue: { color: '#750656', fontWeight: '600' },
   subheading: { marginTop: 20, fontSize: 16, fontWeight: 'bold' },
-
   orderBox: {
     marginTop: 10,
     padding: 15,
@@ -73,7 +106,6 @@ const styles = StyleSheet.create({
   divider: { borderBottomWidth: 1, borderBottomColor: '#ddd', marginVertical: 10 },
   total: { fontWeight: 'bold', fontSize: 16, marginTop: 5 },
   savings: { color: '#04aa6d', fontSize: 14, marginTop: 10 },
-
   footerButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -85,6 +117,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
+    flex: 0.48,
+    alignItems: 'center',
   },
   rejectText: { color: '#750656', fontWeight: '600' },
   accept: {
@@ -92,6 +126,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
+    flex: 0.48,
+    alignItems: 'center',
   },
   acceptText: { color: '#000', fontWeight: '600' },
 });

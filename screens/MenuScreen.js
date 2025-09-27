@@ -98,11 +98,51 @@ export default function MenuScreen() {
     ]);
   };
 
+  // -------------------------------
+  // Dynamic Styles
+  // -------------------------------
+  const dynamicStyles = useMemo(() => ({
+    headerText: { 
+      fontSize: 20, 
+      fontWeight: 'bold', 
+      color: chefData?.food_styles?.includes('Spicy') ? '#FF4500' : '#000' 
+    },
+    tabButton: (type) => ({
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 20,
+      backgroundColor: selectedServiceType === type
+        ? chefData?.food_styles?.includes('Sweet') ? '#FF69B4' : '#0A3E73'
+        : '#F0F0F0',
+    }),
+    tabText: (type) => ({
+      color: selectedServiceType === type ? '#fff' : '#555',
+      fontWeight: '500',
+    }),
+    itemCard: (item) => ({
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 15,
+      backgroundColor: item.is_available ? '#E6FFFA' : '#fff', // Available items highlighted
+      padding: 12,
+      borderRadius: 10,
+      shadowColor: '#000',
+      shadowOpacity: 0.05,
+      shadowRadius: 5,
+      elevation: 2,
+    }),
+    itemName: (item) => ({
+      fontSize: 16,
+      fontWeight: '600',
+      color: item.is_available ? '#000' : '#888',
+    }),
+  }), [chefData, selectedServiceType]);
+
   const renderItem = ({ item }) => (
-    <View style={styles.itemCard}>
+    <View style={dynamicStyles.itemCard(item)}>
       <Image source={{ uri: item.photo }} style={styles.itemImage} />
       <View style={{ flex: 1, marginLeft: 10 }}>
-        <Text style={styles.itemName}>{item.food_name}</Text>
+        <Text style={dynamicStyles.itemName(item)}>{item.food_name}</Text>
         <Text style={styles.itemDetail}>₹{item.price}</Text>
         <Text style={styles.itemDetail}>
           {item.food_type} • Qty: {item.quantity}
@@ -123,7 +163,7 @@ export default function MenuScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.headerContainer}>
-        <Text style={styles.headerText}>Menu</Text>
+        <Text style={dynamicStyles.headerText}>Menu</Text>
         <View style={styles.subHeader}>
           <Text style={styles.foodStyle}>
             {Array.isArray(chefData?.food_styles) && chefData.food_styles.length > 0
@@ -141,12 +181,10 @@ export default function MenuScreen() {
         {serviceTypes.map((type) => (
           <TouchableOpacity
             key={type}
-            style={[styles.tabButton, selectedServiceType === type && styles.activeTab]}
+            style={dynamicStyles.tabButton(type)}
             onPress={() => setSelectedServiceType(type)}
           >
-            <Text style={[styles.tabText, selectedServiceType === type && styles.activeText]}>
-              {type}
-            </Text>
+            <Text style={dynamicStyles.tabText(type)}>{type}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -204,6 +242,9 @@ export default function MenuScreen() {
   );
 }
 
+// -------------------------------
+// Static Styles
+// -------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FCFCFD' },
   headerContainer: {
@@ -214,28 +255,10 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     backgroundColor: '#fff',
   },
-  headerText: { fontSize: 20, fontWeight: 'bold', color: '#000' },
   subHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, alignItems: 'center' },
   foodStyle: { fontSize: 14, color: '#750656', fontWeight: '500' },
   tabContainer: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 10 },
-  tabButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#F0F0F0' },
-  activeTab: { backgroundColor: '#0A3E73' },
-  tabText: { color: '#555', fontWeight: '500' },
-  activeText: { color: '#fff' },
-  itemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-  },
   itemImage: { width: 70, height: 70, borderRadius: 8 },
-  itemName: { fontSize: 16, fontWeight: '600' },
   itemDetail: { fontSize: 14, color: '#555' },
   discountText: { fontSize: 12, color: 'green', fontWeight: '500' },
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },

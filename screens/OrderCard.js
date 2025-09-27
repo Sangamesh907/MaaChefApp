@@ -1,96 +1,89 @@
 // components/OrderCard.js
-import React, { useContext } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { ChefContext } from '../context/ChefContext';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import ChefService from "../services/api";
 
 export default function OrderCard({ order, onViewDetails, onRespond }) {
-  const { token } = useContext(ChefContext); // get token from context
+  const [loading, setLoading] = useState(false);
 
-  const respondToOrder = async (status) => {
+  const respondToOrder = async (action) => {
+    const statusMap = { accepted: "chef_accepted", rejected: "cancelled" };
     try {
-      const res = await fetch('http://13.204.84.41/api/orders/chef/response', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`, // use token from context
-        },
-        body: JSON.stringify({
-          order_id: order._id,
-          status: status, // 'accepted' or 'rejected'
-        }),
-      });
-
-      const data = await res.json();
-      console.log('API Response:', data);
-
-      if (data.success) {
-        Alert.alert('Success', `Order ${status} successfully!`);
-        onRespond && onRespond(status); // notify parent to update UI
+      setLoading(true);
+      const res = await ChefService.updateOrderStatus(order._id, statusMap[action]);
+      if (res.status === "success") {
+        Alert.alert("Success", `Order ${action} successfully!`);
+        onRespond && onRespond(action);
       } else {
-        Alert.alert('Error', data.message || 'Something went wrong.');
+        Alert.alert("Error", res.message || "Something went wrong.");
       }
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to update order status.');
+      console.error("Order update error:", error);
+      Alert.alert("Error", "Failed to update order status.");
+    } finally {
+      setLoading(false);
     }
   };
+
+  const isNew = order.status === "pending";
+  const isOngoing = ["chef_accepted", "preparing", "ready"].includes(order.status);
+  const isDelivered = ["completed", "delivered"].includes(order.status);
 
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <Text style={styles.name}>{order.name}</Text>
+        <Text style={styles.name}>{order.customer_name || 'Unknown'}</Text>
         <TouchableOpacity>
           <Text style={styles.help}>Help</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.time}>{order.time}</Text>
+
+      <Text style={styles.time}>{order.created_at ? new Date(order.created_at).toLocaleString() : '-'}</Text>
       <Text style={styles.cuisine}>
-        Cuisine: <Text style={styles.cuisineValue}>{order.cuisine}</Text>
+        Cuisine: <Text style={styles.cuisineValue}>{order.cuisine || '-'}</Text>
       </Text>
-      <Text style={styles.items}>Items: {order.items}</Text>
+      <Text style={styles.items}>
+        Items: {(order.items || []).map(i => i.food_name || i.name).join(', ')}
+      </Text>
 
       <View style={styles.row}>
-        {order.status === 'New Orders' && (
+        {isNew && (
           <>
             <TouchableOpacity
               style={styles.reject}
-              onPress={async () => await respondToOrder('rejected')}
+              onPress={() => respondToOrder('rejected')}
+              disabled={loading}
             >
-              <Text style={styles.rejectText}>Reject Order</Text>
+              {loading ? <ActivityIndicator color="#750656" /> : <Text style={styles.rejectText}>Reject</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.accept}
-              onPress={async () => await respondToOrder('accepted')}
+              onPress={() => respondToOrder('accepted')}
+              disabled={loading}
             >
-              <Text style={styles.acceptText}>Accept Order</Text>
+              {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.acceptText}>Accept</Text>}
             </TouchableOpacity>
           </>
         )}
 
-        {order.status === 'Ongoing Orders' && (
+        {isOngoing && (
           <>
             <TouchableOpacity style={styles.inProcess}>
               <Text style={styles.inProcessText}>In Process</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.accept}
-              onPress={onViewDetails}
-            >
+            <TouchableOpacity style={styles.accept} onPress={() => onViewDetails(order)}>
               <Text style={styles.acceptText}>View Details</Text>
             </TouchableOpacity>
           </>
         )}
 
-        {order.status === 'Delivered' && (
+        {isDelivered && (
           <>
             <TouchableOpacity style={styles.delivered}>
               <Text style={styles.deliveredText}>Delivered</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.accept}
-              onPress={onViewDetails}
-            >
+            <TouchableOpacity style={styles.accept} onPress={() => onViewDetails(order)}>
               <Text style={styles.acceptText}>View Details</Text>
             </TouchableOpacity>
           </>

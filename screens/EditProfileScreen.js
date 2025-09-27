@@ -17,14 +17,15 @@ import {
 import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import ImageResizer from "react-native-image-resizer";
+import ChefService from "../services/api";
 
 import { ChefContext } from "../context/ChefContext";
-import { LocationContext } from "../context/LocationContext"; // Pre-fetched location
+import { LocationContext } from "../context/LocationContext";
 
 const EditProfileScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { chefData, updateChefData, token } = useContext(ChefContext);
+  const { chefData, updateChef } = useContext(ChefContext);
   const { location: splashLocation } = useContext(LocationContext);
 
   const [imageUri, setImageUri] = useState(chefData?.profile_image || null);
@@ -65,7 +66,13 @@ const EditProfileScreen = () => {
   // Compress image
   const compressImage = async (uri) => {
     try {
-      const resized = await ImageResizer.createResizedImage(uri, 800, 800, "JPEG", 80);
+      const resized = await ImageResizer.createResizedImage(
+        uri,
+        800,
+        800,
+        "JPEG",
+        80
+      );
       return resized.uri;
     } catch (err) {
       console.warn("Image compression error:", err);
@@ -91,14 +98,21 @@ const EditProfileScreen = () => {
   const validate = () => {
     const newErrors = {};
     if (!name.trim()) newErrors.name = "Please enter your name";
-    if (!mobile.trim() || mobile.length !== 10) newErrors.mobile = "Enter a valid 10-digit number";
-    if (!email.trim() || !/^\S+@\S+\.\S+$/.test(email)) newErrors.email = "Enter a valid email";
+    if (!mobile.trim() || mobile.length !== 10)
+      newErrors.mobile = "Enter a valid 10-digit number";
+    if (!email.trim() || !/^\S+@\S+\.\S+$/.test(email))
+      newErrors.email = "Enter a valid email";
     if (!nativePlace.trim()) newErrors.nativePlace = "Please enter native place";
-    if (!aadhaar.trim() || aadhaar.length !== 12) newErrors.aadhaar = "Enter a valid 12-digit Aadhaar";
+    if (!aadhaar.trim() || aadhaar.length !== 12)
+      newErrors.aadhaar = "Enter a valid 12-digit Aadhaar";
     if (!foodStyle.length) newErrors.foodStyle = "Please select food style";
     if (!imageUri) newErrors.image = "Please select a profile image";
 
-    if (!chefData.location || !Array.isArray(chefData.location.coordinates) || chefData.location.coordinates.length !== 2) {
+    if (
+      !chefData.location ||
+      !Array.isArray(chefData.location.coordinates) ||
+      chefData.location.coordinates.length !== 2
+    ) {
       newErrors.location = "Location not found. Please restart app.";
     }
 
@@ -107,47 +121,55 @@ const EditProfileScreen = () => {
   };
 
   // Save handler
-  const handleSave = async () => {
-    if (!validate()) return;
-    setLoading(true);
-    try {
-      if (!token) {
-        Alert.alert("Error", "Session expired. Please log in again.");
-        navigation.replace("Login");
-        return;
-      }
+const handleSave = async () => {
+  if (!validate()) return;
+  setLoading(true);
+  try {
+    const updatedFields = {
+      name,
+      phone_number: mobile,
+      email,
+      native_place: nativePlace,
+      aadhar_number: aadhaar,
+      food_styles: foodStyle,
+      profile_image: imageUri,
+      location: chefData.location,
+    };
 
-      const updatedFields = {
-        name,
-        phone_number: mobile,
-        email,
-        native_place: nativePlace,
-        aadhar_number: aadhaar,
-        food_styles: foodStyle,
-        profile_image: imageUri,
-        location: chefData.location,
-      };
+    // Use context function to update profile
+    await updateChef(updatedFields);
 
-      await updateChefData(updatedFields);
+    Alert.alert("Success", "Profile updated successfully!");
+    navigation.goBack(); // Go back to ProfileScreen
+  } catch (error) {
+    console.error("Profile update error:", error);
+    setErrors({
+      general: error.response?.data?.message || error.message || "Something went wrong",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
-      Alert.alert("Success", "Profile updated successfully!");
-      navigation.reset({ index: 0, routes: [{ name: "HomeTabs" }] });
-    } catch (error) {
-      console.error("Profile update error:", error);
-      setErrors({ general: error.message || "Something went wrong. Please try again." });
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const renderField = (label, value, onChangeText, placeholder, keyboardType = "default", maxLength, errorKey) => (
+
+  const renderField = (
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    keyboardType = "default",
+    maxLength,
+    errorKey
+  ) => (
     <View style={styles.fieldWrapper}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         style={[styles.input, errors[errorKey] && styles.inputError]}
         value={value}
         onChangeText={(text) => {
-          if (errors[errorKey]) setErrors((prev) => ({ ...prev, [errorKey]: null }));
+          if (errors[errorKey])
+            setErrors((prev) => ({ ...prev, [errorKey]: null }));
           onChangeText(text);
         }}
         placeholder={placeholder}
@@ -168,21 +190,58 @@ const EditProfileScreen = () => {
     );
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 80 }}>
         <View style={styles.imageContainer}>
-          <Image source={imageUri ? { uri: imageUri } : require("../assets/default_avatar.png")} style={styles.profileImage} />
-          <TouchableOpacity style={styles.editIcon} onPress={() => setPickerVisible(true)}>
+          <Image
+            source={
+              imageUri
+                ? { uri: imageUri }
+                : require("../assets/default_avatar.png")
+            }
+            style={styles.profileImage}
+          />
+          <TouchableOpacity
+            style={styles.editIcon}
+            onPress={() => setPickerVisible(true)}
+          >
             <Text style={{ color: "#fff", fontWeight: "bold" }}>✎</Text>
           </TouchableOpacity>
         </View>
 
         {errors.image && <Text style={styles.errorText}>{errors.image}</Text>}
         {renderField("Full Name", name, setName, "Enter Full Name", "default", 50, "name")}
-        {renderField("Mobile Number", mobile, (t) => /^\d{0,10}$/.test(t) && setMobile(t), "10-digit number", "phone-pad", 10, "mobile")}
+        {renderField(
+          "Mobile Number",
+          mobile,
+          (t) => /^\d{0,10}$/.test(t) && setMobile(t),
+          "10-digit number",
+          "phone-pad",
+          10,
+          "mobile"
+        )}
         {renderField("Email", email, setEmail, "Enter Email", "email-address", 100, "email")}
-        {renderField("Native Place", nativePlace, setNativePlace, "Enter Native Place", "default", 100, "nativePlace")}
-        {renderField("Aadhaar Number", aadhaar, (t) => /^\d{0,12}$/.test(t) && setAadhaar(t), "12-digit Aadhaar", "numeric", 12, "aadhaar")}
+        {renderField(
+          "Native Place",
+          nativePlace,
+          setNativePlace,
+          "Enter Native Place",
+          "default",
+          100,
+          "nativePlace"
+        )}
+        {renderField(
+          "Aadhaar Number",
+          aadhaar,
+          (t) => /^\d{0,12}$/.test(t) && setAadhaar(t),
+          "12-digit Aadhaar",
+          "numeric",
+          12,
+          "aadhaar"
+        )}
 
         <View style={styles.fieldWrapper}>
           <Text style={styles.label}>Food Style</Text>
@@ -197,13 +256,26 @@ const EditProfileScreen = () => {
           {errors.foodStyle && <Text style={styles.errorText}>{errors.foodStyle}</Text>}
         </View>
 
-        {errors.general && <Text style={[styles.errorText, { textAlign: "center", marginTop: 10 }]}>{errors.general}</Text>}
+        {errors.general && (
+          <Text style={[styles.errorText, { textAlign: "center", marginTop: 10 }]}>
+            {errors.general}
+          </Text>
+        )}
 
-        <TouchableOpacity style={[styles.saveButton, loading && { opacity: 0.6 }]} onPress={handleSave} disabled={loading}>
+        <TouchableOpacity
+          style={[styles.saveButton, loading && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={loading}
+        >
           <Text style={styles.saveText}>Update Profile</Text>
         </TouchableOpacity>
 
-        <Modal transparent visible={pickerVisible} animationType="slide" onRequestClose={() => setPickerVisible(false)}>
+        <Modal
+          transparent
+          visible={pickerVisible}
+          animationType="slide"
+          onRequestClose={() => setPickerVisible(false)}
+        >
           <View style={styles.bottomSheet}>
             <TouchableOpacity style={styles.sheetButton} onPress={chooseCamera}>
               <Text style={styles.sheetText}>📷 Take Photo</Text>
@@ -211,7 +283,10 @@ const EditProfileScreen = () => {
             <TouchableOpacity style={styles.sheetButton} onPress={chooseGallery}>
               <Text style={styles.sheetText}>🖼 Choose from Gallery</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.sheetButton, { backgroundColor: "#ddd" }]} onPress={() => setPickerVisible(false)}>
+            <TouchableOpacity
+              style={[styles.sheetButton, { backgroundColor: "#ddd" }]}
+              onPress={() => setPickerVisible(false)}
+            >
               <Text style={[styles.sheetText, { color: "#333" }]}>Cancel</Text>
             </TouchableOpacity>
           </View>

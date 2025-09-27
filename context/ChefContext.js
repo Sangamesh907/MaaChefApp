@@ -50,7 +50,7 @@ export const ChefProvider = ({ children }) => {
       photo_url: chef.photo_url || null,
     };
 
-    // Inject splash location if location is empty
+    // Inject splash location if empty
     if (
       (!normalized.location.coordinates || normalized.location.coordinates.length !== 2) &&
       splashLocation?.latitude &&
@@ -67,7 +67,7 @@ export const ChefProvider = ({ children }) => {
   };
 
   // -----------------------
-  // Load chef from storage
+  // Load chef from AsyncStorage
   // -----------------------
   useEffect(() => {
     const loadChef = async () => {
@@ -109,7 +109,7 @@ export const ChefProvider = ({ children }) => {
   };
 
   // -----------------------
-  // Unified dynamic update for all chef fields
+  // Update chef data (profile, image, food_styles)
   // -----------------------
   const updateChefData = async (updatedFields) => {
     try {
@@ -129,31 +129,20 @@ export const ChefProvider = ({ children }) => {
         };
       }
 
-      // Update food styles via backend if present
-      if (updatedFields.food_styles) {
-        const response = await ChefService.updateChefFoodStyle(updatedFields.food_styles);
-        if (response?.updated) {
-          newChefData.food_styles = response.updated.food_styles;
+      // Unified API call
+      const res = await ChefService.updateProfile(updatedFields);
+
+      // Merge backend response
+      if (res?.updated) {
+        newChefData = { ...newChefData, ...res.updated };
+
+        // Convert photo_url to full URL if returned
+        if (res.updated.photo_url) {
+          newChefData.profile_image = `${BASE_URL}${res.updated.photo_url}`;
         }
       }
 
-      // Update profile image if changed
-      if (updatedFields.profile_image && updatedFields.profile_image !== chefData.profile_image) {
-        const formData = new FormData();
-        formData.append("profile_image", {
-          uri: updatedFields.profile_image,
-          type: "image/jpeg",
-          name: "profile.jpg",
-        });
-        const res = await ChefService.updateProfile(formData);
-        if (res?.updated) {
-          newChefData.profile_image = res.updated.photo_url
-            ? `${BASE_URL}${res.updated.photo_url}`
-            : newChefData.profile_image;
-        }
-      }
-
-      // Save updated data to context and AsyncStorage
+      // Save updated data to context & AsyncStorage
       setChefData(newChefData);
       await AsyncStorage.setItem("chef_data", JSON.stringify(newChefData));
 
@@ -165,7 +154,7 @@ export const ChefProvider = ({ children }) => {
   };
 
   // -----------------------
-  // Add menu item
+  // Add menu item to context
   // -----------------------
   const addMenuItemToContext = async (newItem) => {
     try {
@@ -216,8 +205,7 @@ export const ChefProvider = ({ children }) => {
         logoutChef,
         setChefData,
         addMenuItemToContext,
-            updateChef: updateChefData, // ✅ add this line
-
+        updateChef: updateChefData,
       }}
     >
       {children}

@@ -1,4 +1,3 @@
-// ProfileScreen.js
 import React, { useContext } from 'react';
 import {
   View,
@@ -10,20 +9,12 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { ChefContext } from '../context/ChefContext';
 
 const ProfileScreen = () => {
   const navigation = useNavigation();
   const { chefData, logoutChef } = useContext(ChefContext);
-
-  // Force re-render on focus to show latest profile
-  const [, setRefresh] = React.useState(false);
-  useFocusEffect(
-    React.useCallback(() => {
-      setRefresh(prev => !prev);
-    }, [])
-  );
 
   const handleMenuPress = (label) => {
     switch (label) {
@@ -75,7 +66,7 @@ const ProfileScreen = () => {
           <Image
             source={
               chefData.profile_image
-                ? { uri: chefData.profile_image } // full URL
+                ? { uri: chefData.profile_image }
                 : require('../assets/default_avatar.png')
             }
             style={styles.avatar}
