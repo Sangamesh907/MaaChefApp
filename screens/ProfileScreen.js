@@ -1,3 +1,4 @@
+// ProfileScreen.js
 import React, { useContext } from 'react';
 import {
   View,
@@ -8,36 +9,49 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { ChefContext } from '../context/ChefContext';
 
 const ProfileScreen = () => {
   const navigation = useNavigation();
   const { chefData, logoutChef } = useContext(ChefContext);
 
-  const profileFields = [
-    { label: 'Profile Image', key: 'profile_image', type: 'image' },
-    { label: 'Name', key: 'name' },
-    { label: 'Email', key: 'email' },
-    { label: 'Phone', key: 'phone_number' },
-    { label: 'Native Place', key: 'native_place' },
-    { label: 'Aadhaar', key: 'aadhar_number' },
-    { label: 'Food Styles', key: 'food_styles' },
-  ];
+  // Force re-render on focus to show latest profile
+  const [, setRefresh] = React.useState(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      setRefresh(prev => !prev);
+    }, [])
+  );
 
-  const menuItems = [
-    { icon: 'reorder-three', text: 'Orders', route: 'Orders' },
-    { icon: 'location-outline', text: 'Chef Home Address', route: 'ChefHomeAddress' },
-    { icon: 'star-outline', text: 'User Rating', route: 'UserRating' },
-    { icon: 'headset-outline', text: 'Customer Support', route: 'CustomerSupport' },
-    { icon: 'help-circle-outline', text: "FAQ's", route: 'FAQ' },
-    { icon: 'document-text-outline', text: 'Terms and Conditions', route: 'TermsConditions' },
-    { icon: 'shield-checkmark-outline', text: 'Privacy Policy', route: 'PrivacyPolicy' },
-  ];
-
-  const handleMenuPress = (route) => navigation.navigate(route);
+  const handleMenuPress = (label) => {
+    switch (label) {
+      case 'Orders':
+        navigation.navigate('Orders');
+        break;
+      case 'Chef Home Address':
+        navigation.navigate('ChefHomeAddress');
+        break;
+      case 'User Rating':
+        navigation.navigate('UserRating');
+        break;
+      case 'Customer Support':
+        navigation.navigate('CustomerSupport');
+        break;
+      case "FAQ's":
+        navigation.navigate('FAQ');
+        break;
+      case 'Terms and Conditions':
+        navigation.navigate('TermsConditions');
+        break;
+      case 'Privacy Policy':
+        navigation.navigate('PrivacyPolicy');
+        break;
+      default:
+        break;
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -55,70 +69,61 @@ const ProfileScreen = () => {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          {profileFields.map((field) => {
-            const value = chefData[field.key];
-
-            // Render profile image at top
-            if (field.type === 'image') {
-              return (
-                <Image
-                  key={field.key}
-                  source={
-                    value
-                      ? { uri: value }
-                      : require('../assets/default_avatar.png')
-                  }
-                  style={styles.avatar}
-                />
-              );
+      <View style={{ flex: 1 }}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Image
+            source={
+              chefData.profile_image
+                ? { uri: chefData.profile_image } // full URL
+                : require('../assets/default_avatar.png')
             }
-
-            const displayValue = Array.isArray(value)
-              ? value.join(', ')
-              : value || 'Not set';
-
-            return (
-              <View key={field.key} style={styles.detailRow}>
-                <Text style={styles.detailLabel}>{field.label}</Text>
-                <Text style={styles.detailValue}>{displayValue}</Text>
-              </View>
-            );
-          })}
-
+            style={styles.avatar}
+          />
+          <View style={styles.userInfo}>
+            <Text style={styles.name}>{chefData.name || 'Your Name'}</Text>
+            <Text style={styles.email}>{chefData.email || 'you@example.com'}</Text>
+            <Text style={styles.phone}>{chefData.phone_number || '0123456789'}</Text>
+          </View>
           <TouchableOpacity
-            style={styles.editButton}
             onPress={() => navigation.navigate('EditProfile')}
+            style={styles.editIcon}
           >
-            <Icon name="create-outline" size={18} color="#fff" />
-            <Text style={styles.editButtonText}>Edit Profile</Text>
+            <Icon name="create-outline" size={20} color="#008080" />
+            <Text style={styles.editText}>Edit</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Menu Options */}
-        <View style={styles.menuContainer}>
-          {menuItems.map((item, index) => (
+        {/* Menu List */}
+        <ScrollView style={styles.menu} contentContainerStyle={{ paddingBottom: 10 }}>
+          {[
+            { icon: 'reorder-three', text: 'Orders' },
+            { icon: 'location-outline', text: 'Chef Home Address' },
+            { icon: 'star-outline', text: 'User Rating' },
+            { icon: 'headset-outline', text: 'Customer Support' },
+            { icon: 'help-circle-outline', text: "FAQ's" },
+            { icon: 'document-text-outline', text: 'Terms and Conditions' },
+            { icon: 'shield-checkmark-outline', text: 'Privacy Policy' },
+          ].map((item, index) => (
             <TouchableOpacity
               key={index}
-              style={styles.menuItem}
-              onPress={() => handleMenuPress(item.route)}
+              style={styles.item}
+              onPress={() => handleMenuPress(item.text)}
             >
-              <View style={styles.menuLeft}>
-                <Icon name={item.icon} size={28} color="#008080" />
-                <Text style={styles.menuText}>{item.text}</Text>
+              <View style={styles.itemLeft}>
+                <Icon name={item.icon} size={40} color="#008080" />
+                <Text style={styles.itemText}>{item.text}</Text>
               </View>
-              <Icon name="chevron-forward-outline" size={22} color="#bbb" />
+              <Icon name="chevron-forward-outline" size={27} color="#bbb" />
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
+      </View>
 
-        {/* Logout */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>LOGOUT</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      {/* Logout Button */}
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+        <Text style={styles.logoutText}>LOGOUT</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -126,70 +131,35 @@ const ProfileScreen = () => {
 export default ProfileScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f2f7' },
-
-  profileCard: {
-    backgroundColor: '#fff',
-    margin: 15,
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 5,
-    elevation: 4,
-  },
-  avatar: { width: 110, height: 110, borderRadius: 55, marginBottom: 15 },
-
-  detailRow: {
-    width: '100%',
+  container: { flex: 1, backgroundColor: '#fff' },
+  header: { flexDirection: 'row', padding: 20, alignItems: 'center', backgroundColor: '#fff' },
+  avatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 1, borderColor: '#ccc' },
+  userInfo: { marginLeft: 15, flex: 1 },
+  name: { fontWeight: 'bold', fontSize: 17, color: '#000' },
+  email: { fontSize: 14, color: '#555' },
+  phone: { fontSize: 14, color: '#555' },
+  editIcon: { alignItems: 'center' },
+  editText: { color: '#008080', fontSize: 13, marginTop: 2 },
+  menu: { marginTop: 10 },
+  item: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: '#fdfdfd',
     borderBottomWidth: 0.5,
     borderColor: '#eee',
   },
-  detailLabel: { color: '#555', fontWeight: '600', fontSize: 15 },
-  detailValue: { color: '#111', fontWeight: '500', fontSize: 15 },
-
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 20,
-    backgroundColor: '#008080',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 25,
-  },
-  editButtonText: { color: '#fff', fontWeight: '600', marginLeft: 6 },
-
-  menuContainer: { marginTop: 20 },
-  menuItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 15,
-    marginVertical: 6,
-    borderRadius: 16,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  menuLeft: { flexDirection: 'row', alignItems: 'center' },
-  menuText: { marginLeft: 12, fontSize: 15, fontWeight: '500', color: '#333' },
-
+  itemLeft: { flexDirection: 'row', alignItems: 'center' },
+  itemText: { marginLeft: 10, fontSize: 15, color: '#333' },
   logoutBtn: {
-    marginHorizontal: 15,
-    marginTop: 25,
-    backgroundColor: '#ffe6e6',
-    paddingVertical: 16,
-    borderRadius: 25,
+    paddingVertical: 15,
+    marginHorizontal: 20,
+    marginBottom: 15,
+    backgroundColor: '#e6f3f1',
+    borderRadius: 20,
     alignItems: 'center',
   },
-  logoutText: { color: '#ff4d4d', fontWeight: 'bold', fontSize: 16 },
+  logoutText: { color: '#008080', fontWeight: 'bold', fontSize: 16 },
 });

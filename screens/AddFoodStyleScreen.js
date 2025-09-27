@@ -1,3 +1,4 @@
+// AddFoodStyleScreen.js
 import React, { useState, useContext } from "react";
 import {
   View,
@@ -9,7 +10,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import { ChefContext } from "../context/ChefContext";
-import { updateChefFoodStyle } from "../services/foodStyleService";
+import ChefService from "../services/api"; // ✅ Import the service
 
 // Colors
 const SELECTED_BG_COLOR = "#E0F2F1";
@@ -19,7 +20,7 @@ const UNSELECTED_BORDER_COLOR = "#ccc";
 const DECO_GREEN_COLOR = "#009688";
 const DECO_PURPLE_COLOR = "#673AB7";
 
-// ✅ Static list of food styles
+// Static list of food styles
 const STATIC_FOOD_STYLES = [
   "Andhra Style","Arunachal Pradesh Style","Assam Style","Bihar Style",
   "Chattisgarh Style","Delhi Style","Goa Style","Gujarat Style","Haryana Style",
@@ -31,25 +32,26 @@ const STATIC_FOOD_STYLES = [
 ];
 
 const AddFoodStyleScreen = ({ navigation }) => {
-  const { chefData, updateChef, token } = useContext(ChefContext);
-
+  const { chefData, updateChef } = useContext(ChefContext);
   const [selectedFoodStyle, setSelectedFoodStyle] = useState(
     chefData?.food_styles?.[0] || ""
   );
+  const [loading, setLoading] = useState(false);
 
   const handleSelectAndSave = async (style) => {
     setSelectedFoodStyle(style);
 
-    if (!chefData?.id || !token) {
+    if (!chefData?.id) {
       Alert.alert("Error", "Chef not logged in properly.");
       return;
     }
 
+    setLoading(true);
     try {
-      // Send as array to backend
-      const result = await updateChefFoodStyle([style], token);
+      // ✅ Call ChefService to update food styles
+      const result = await ChefService.updateChefFoodStyle([style]);
 
-      // Update context as array
+      // Update context
       updateChef({ food_styles: [style] });
 
       Alert.alert("Success", "Food style updated.");
@@ -57,6 +59,8 @@ const AddFoodStyleScreen = ({ navigation }) => {
     } catch (err) {
       console.error("Update error:", err);
       Alert.alert("Error", "Unable to update food style.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -70,6 +74,7 @@ const AddFoodStyleScreen = ({ navigation }) => {
               key={index}
               style={[styles.item, selected && styles.itemSelected]}
               onPress={() => handleSelectAndSave(style)}
+              disabled={loading}
             >
               <Text style={[styles.itemText, selected && styles.itemTextSelected]}>
                 {style}

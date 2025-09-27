@@ -1,24 +1,16 @@
+// AddNewItemScreen.js
 import React, { useState, useContext } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ScrollView,
+  KeyboardAvoidingView, Platform, Alert,
 } from "react-native";
 import { launchImageLibrary } from "react-native-image-picker";
 import ImageResizer from "react-native-image-resizer";
 import DropDownPicker from "react-native-dropdown-picker";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { ChefContext } from "../context/ChefContext";
-import { addMenuItemApi, updateMenuItemApi } from "../services/menuService";
+import ChefService from "../services/api"; // ✅ default export
 
-// ✅ Backend allowed enums
 const FOOD_STYLES = [
   "Andhra Style", "Arunachal Pradesh Style", "Assam Style", "Bihar Style", "Chattisgarh Style",
   "Delhi Style", "Goa Style", "Gujarat Style", "Haryana Style", "Himachal Pradesh Style",
@@ -28,14 +20,14 @@ const FOOD_STYLES = [
   "Tripura Style", "Uttrakhand Style", "Uttar Pradesh Style", "West Bengal Style"
 ];
 
-const SERVICE_TYPES = ["Breakfast", "Lunch", "Dinner"]; // ✅ Snacks removed
+const SERVICE_TYPES = ["Breakfast", "Lunch", "Dinner"];
 
 const AddNewItemScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const editingItem = route.params?.editItem;
 
-  const { addMenuItem, updateMenuItem, token } = useContext(ChefContext);
+  const { token, addMenuItemToContext, updateChef } = useContext(ChefContext);
 
   const [imageUri, setImageUri] = useState(editingItem?.imageUri || null);
   const [foodName, setFoodName] = useState(editingItem?.foodName || "");
@@ -48,28 +40,17 @@ const AddNewItemScreen = () => {
   const [foodType, setFoodType] = useState(editingItem?.foodType || null);
   const [foodStyleOpen, setFoodStyleOpen] = useState(false);
 
-  // ✅ Pick and resize image before uploading
   const handleUploadPhoto = async () => {
     try {
       const result = await launchImageLibrary({ mediaType: "photo" });
-
       if (result.didCancel || !result.assets || result.assets.length === 0) return;
-
       const image = result.assets[0];
-
-      // Resize image to prevent 413 error
       const resizedImage = await ImageResizer.createResizedImage(
-        image.uri,
-        800,  // max width
-        800,  // max height
-        "JPEG",
-        80    // quality %
+        image.uri, 800, 800, "JPEG", 80
       );
-
       setImageUri(resizedImage.uri);
-
     } catch (error) {
-      console.error("Image picker or resizing error:", error);
+      console.error("Image picker/resizing error:", error);
       Alert.alert("Error", "Failed to pick or resize image.");
     }
   };
@@ -79,7 +60,6 @@ const AddNewItemScreen = () => {
       Alert.alert("Validation Error", "Please fill all required fields.");
       return;
     }
-
     if (!token) {
       Alert.alert("Authentication Error", "You are not logged in.");
       return;
@@ -100,7 +80,6 @@ const AddNewItemScreen = () => {
         const filename = imageUri.split("/").pop();
         const match = /\.(\w+)$/.exec(filename);
         const type = match ? `image/${match[1]}` : "image/jpeg";
-
         formData.append("photo", {
           uri: Platform.OS === "android" ? imageUri : imageUri.replace("file://", ""),
           type,
@@ -110,9 +89,9 @@ const AddNewItemScreen = () => {
 
       let data;
       if (editingItem) {
-        data = await updateMenuItemApi(editingItem.id, formData, token);
+        data = await ChefService.updateMenuItem(editingItem.id, formData);
       } else {
-        data = await addMenuItemApi(formData, token);
+        data = await ChefService.addMenuItem(formData);
       }
 
       const newItem = {
@@ -127,23 +106,35 @@ const AddNewItemScreen = () => {
         imageUri,
       };
 
-      editingItem ? updateMenuItem(newItem) : addMenuItem(newItem);
+      // ✅ Update context
+      if (editingItem) {
+        // Replace the edited item in menuItems
+        updateChef({
+          menuItems: updateMenuItemInContext(editingItem.id, newItem),
+        });
+      } else {
+        // Add new item to context
+        addMenuItemToContext(newItem);
+      }
 
       Alert.alert("Success", editingItem ? "Item Updated" : "Item Added");
       navigation.goBack();
     } catch (error) {
-      console.error("❌ Network error:", error);
+      console.error("Network error:", error);
       Alert.alert("Error", "A network error occurred.");
     }
   };
 
+  // Helper to update item in context
+  const updateMenuItemInContext = (id, updatedItem) => {
+    return ChefContext.chefData.menuItems.map(item =>
+      item.id === id ? updatedItem : item
+    );
+  };
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={{ paddingBottom: 200 }}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 200 }} keyboardShouldPersistTaps="handled">
         <Text style={styles.headerTitle}>{editingItem ? "Edit Item" : "Add New Item"}</Text>
 
         <TouchableOpacity style={styles.imageWrapper} onPress={handleUploadPhoto}>
@@ -157,15 +148,8 @@ const AddNewItemScreen = () => {
           <Text style={styles.uploadText}>Upload Photo</Text>
         </TouchableOpacity>
 
-        <TextInput
-          placeholder="Food Name"
-          placeholderTextColor="#888"
-          style={styles.input}
-          value={foodName}
-          onChangeText={setFoodName}
-        />
+        <TextInput placeholder="Food Name" placeholderTextColor="#888" style={styles.input} value={foodName} onChangeText={setFoodName} />
 
-        {/* Food Style Dropdown */}
         <DropDownPicker
           open={foodStyleOpen}
           value={foodStyle}
@@ -178,16 +162,12 @@ const AddNewItemScreen = () => {
           style={[styles.dropdown, { marginTop: 15 }]}
         />
 
-        {/* Food Type Dropdown */}
         <DropDownPicker
           open={foodTypeOpen}
           value={foodType}
           setOpen={setFoodTypeOpen}
           setValue={setFoodType}
-          items={[
-            { label: "Veg", value: "veg" },
-            { label: "Non-Veg", value: "non_veg" },
-          ]}
+          items={[{ label: "Veg", value: "veg" }, { label: "Non-Veg", value: "non_veg" }]}
           placeholder="Food Type"
           listMode="MODAL"
           modalTitle="Select Food Type"
@@ -202,37 +182,14 @@ const AddNewItemScreen = () => {
               style={[styles.serviceButton, serviceType === type && styles.serviceSelected]}
               onPress={() => setServiceType(type)}
             >
-              <Text style={[styles.serviceText, serviceType === type && styles.serviceTextSelected]}>
-                {type}
-              </Text>
+              <Text style={[styles.serviceText, serviceType === type && styles.serviceTextSelected]}>{type}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <TextInput
-          placeholder="Quantity"
-          placeholderTextColor="#888"
-          keyboardType="numeric"
-          style={styles.input}
-          value={String(quantity)}
-          onChangeText={setQuantity}
-        />
-        <TextInput
-          placeholder="Price (₹)"
-          placeholderTextColor="#888"
-          keyboardType="numeric"
-          style={styles.input}
-          value={String(price)}
-          onChangeText={setPrice}
-        />
-        <TextInput
-          placeholder="Off (%)"
-          placeholderTextColor="#888"
-          keyboardType="numeric"
-          style={styles.input}
-          value={String(offPrice)}
-          onChangeText={setOffPrice}
-        />
+        <TextInput placeholder="Quantity" placeholderTextColor="#888" keyboardType="numeric" style={styles.input} value={String(quantity)} onChangeText={setQuantity} />
+        <TextInput placeholder="Price (₹)" placeholderTextColor="#888" keyboardType="numeric" style={styles.input} value={String(price)} onChangeText={setPrice} />
+        <TextInput placeholder="Off (%)" placeholderTextColor="#888" keyboardType="numeric" style={styles.input} value={String(offPrice)} onChangeText={setOffPrice} />
 
         <TouchableOpacity style={styles.addBtn} onPress={handleSave}>
           <Text style={styles.addText}>{editingItem ? "Update" : "Add"}</Text>
@@ -247,54 +204,17 @@ export default AddNewItemScreen;
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: "#fff" },
   headerTitle: { fontSize: 20, fontWeight: "bold", textAlign: "center", marginBottom: 10 },
-  imageWrapper: {
-    width: "100%",
-    height: 200,
-    backgroundColor: "#eee",
-    borderRadius: 10,
-    overflow: "hidden",
-  },
+  imageWrapper: { width: "100%", height: 200, backgroundColor: "#eee", borderRadius: 10, overflow: "hidden" },
   image: { width: "100%", height: "100%", resizeMode: "cover" },
-  uploadBtn: {
-    backgroundColor: "#e2f4ee",
-    padding: 10,
-    alignSelf: "center",
-    marginVertical: 10,
-    borderRadius: 20,
-  },
+  uploadBtn: { backgroundColor: "#e2f4ee", padding: 10, alignSelf: "center", marginVertical: 10, borderRadius: 20 },
   uploadText: { color: "#2a7d58", fontWeight: "bold" },
-  input: {
-    borderBottomWidth: 1,
-    borderColor: "#ccc",
-    fontSize: 15,
-    paddingVertical: 8,
-    marginTop: 15,
-    color: "#000",
-  },
+  input: { borderBottomWidth: 1, borderColor: "#ccc", fontSize: 15, paddingVertical: 8, marginTop: 15, color: "#000" },
   dropdown: { borderColor: "#ccc" },
   label: { fontSize: 14, fontWeight: "600", color: "#000", marginTop: 20 },
-  addBtn: {
-    backgroundColor: "#910f6a",
-    paddingVertical: 15,
-    alignItems: "center",
-    borderRadius: 6,
-    marginTop: 30,
-  },
+  addBtn: { backgroundColor: "#910f6a", paddingVertical: 15, alignItems: "center", borderRadius: 6, marginTop: 30 },
   addText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-  serviceContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-    flexWrap: "wrap",
-  },
-  serviceButton: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    marginVertical: 5,
-  },
+  serviceContainer: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, flexWrap: "wrap" },
+  serviceButton: { borderWidth: 1, borderColor: "#ccc", paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, marginVertical: 5 },
   serviceSelected: { backgroundColor: "#910f6a", borderColor: "#910f6a" },
   serviceText: { color: "#000", fontWeight: "500" },
   serviceTextSelected: { color: "#fff", fontWeight: "600" },

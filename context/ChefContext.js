@@ -1,131 +1,208 @@
-import React, { createContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// ChefContext.js
+import React, { createContext, useState, useEffect, useContext } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LocationContext } from "./LocationContext";
+import ChefService, { BASE_URL } from "../services/api";
 
 export const ChefContext = createContext();
 
 export const ChefProvider = ({ children }) => {
+  const { location: splashLocation } = useContext(LocationContext);
+
   const [chefData, setChefData] = useState({
     id: null,
-    name: '',
-    phone_number: '',
-    email: '',
-    native_place: '',
-    aadhar_number: '',
-    food_styles: '',
+    name: "",
+    phone_number: "",
+    email: "",
+    native_place: "",
+    aadhar_number: "",
+    food_styles: [],
     profile_image: null,
     menuItems: [],
+    location: { type: "Point", coordinates: [], address: null },
+    role: "chef",
+    photo_url: null,
   });
 
   const [token, setToken] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isNewChef, setIsNewChef] = useState(false);
 
-  useEffect(() => {
-    const checkLogin = async () => {
-      const savedToken = await AsyncStorage.getItem('chef_token');
-      if (savedToken) setIsLoggedIn(true);
-      setLoading(false);
+  // -----------------------
+  // Normalize chef data
+  // -----------------------
+  const normalizeChefData = (chef) => {
+    const normalized = {
+      id: chef.id || chef._id || null,
+      name: chef.name || "",
+      phone_number: chef.phone_number || "",
+      email: chef.email || "",
+      native_place: chef.native_place || "",
+      aadhar_number: chef.aadhar_number || "",
+      food_styles: chef.food_styles || [],
+      profile_image: chef.photo_url
+        ? `${BASE_URL}${chef.photo_url}`
+        : chef.profile_image || null,
+      menuItems: chef.menuItems || [],
+      location: chef.location || { type: "Point", coordinates: [], address: null },
+      role: chef.role || "chef",
+      photo_url: chef.photo_url || null,
     };
-    checkLogin();
-  }, []);
 
-  const normalizeMenuItems = (items = []) =>
-    items.map(item => ({ ...item, id: item.id || item._id }));
+    // Inject splash location if location is empty
+    if (
+      (!normalized.location.coordinates || normalized.location.coordinates.length !== 2) &&
+      splashLocation?.latitude &&
+      splashLocation?.longitude
+    ) {
+      normalized.location = {
+        type: "Point",
+        coordinates: [splashLocation.longitude, splashLocation.latitude],
+        address: splashLocation.address || null,
+      };
+    }
 
-  const normalizeFoodStyles = (styles) => {
-    if (!styles) return '';
-    if (Array.isArray(styles)) return styles;
-    if (typeof styles === 'string') return styles;
-    return '';
+    return normalized;
   };
 
-  const loginChef = async (chef, accessToken) => {
-    setChefData({
-      ...chef,
-      id: chef.id || chef._id,
-      menuItems: normalizeMenuItems(chef.menuItems),
-      food_styles: normalizeFoodStyles(chef.food_styles),
-      name: chef.name || '',
-      phone_number: chef.phone_number || '',
-      email: chef.email || '',
-      native_place: chef.native_place || '',
-      aadhar_number: chef.aadhar_number || '',
-      profile_image: chef.profile_image || null,
-    });
+  // -----------------------
+  // Load chef from storage
+  // -----------------------
+  useEffect(() => {
+    const loadChef = async () => {
+      try {
+        const savedToken = await AsyncStorage.getItem("chef_token");
+        const savedChef = await AsyncStorage.getItem("chef_data");
+        const savedIsNew = await AsyncStorage.getItem("chef_is_new");
+
+        if (savedToken && savedChef) {
+          setToken(savedToken);
+          setChefData(normalizeChefData(JSON.parse(savedChef)));
+          setIsLoggedIn(true);
+          setIsNewChef(savedIsNew === "true");
+        }
+      } catch (err) {
+        console.error("Error loading chef from storage:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadChef();
+  }, [splashLocation]);
+
+  // -----------------------
+  // Login chef
+  // -----------------------
+  const loginChef = async (chef, accessToken, newChefFlag = false) => {
+    const fullChefData = normalizeChefData(chef);
+
+    setChefData(fullChefData);
     setToken(accessToken);
     setIsLoggedIn(true);
-    await AsyncStorage.setItem('chef_token', accessToken);
+    setIsNewChef(newChefFlag);
+
+    await AsyncStorage.setItem("chef_token", accessToken);
+    await AsyncStorage.setItem("chef_data", JSON.stringify(fullChefData));
+    await AsyncStorage.setItem("chef_is_new", newChefFlag ? "true" : "false");
   };
 
-  const logoutChef = async () => {
-    setChefData({
-      id: null,
-      name: '',
-      phone_number: '',
-      email: '',
-      native_place: '',
-      aadhar_number: '',
-      food_styles: '',
-      profile_image: null,
-      menuItems: [],
-    });
-    setToken(null);
-    setIsLoggedIn(false);
-    await AsyncStorage.removeItem('chef_token');
-  };
+  // -----------------------
+  // Unified dynamic update for all chef fields
+  // -----------------------
+  const updateChefData = async (updatedFields) => {
+    try {
+      let newChefData = { ...chefData, ...updatedFields };
 
-  const updateChefProfile = (updatedData) => {
-    setChefData(prev => ({
-      ...prev,
-      ...updatedData,
-      menuItems: normalizeMenuItems(updatedData.menuItems || prev.menuItems),
-      food_styles: normalizeFoodStyles(updatedData.food_styles || prev.food_styles),
-      phone_number: updatedData.phone_number || prev.phone_number, // ✅ ensure phone updates
-    }));
-  };
-
-  const updateChef = (updatedData) => {
-    if (typeof updatedData === 'function') {
-      setChefData(prev => {
-        const newData = updatedData(prev);
-        return {
-          ...prev,
-          ...newData,
-          menuItems: normalizeMenuItems(newData.menuItems || prev.menuItems),
-          food_styles: normalizeFoodStyles(newData.food_styles || prev.food_styles),
-          phone_number: newData.phone_number || prev.phone_number, // ✅ ensure phone updates
+      // Inject splash location if missing
+      if (
+        (!newChefData.location?.coordinates ||
+          newChefData.location.coordinates.length !== 2) &&
+        splashLocation?.latitude &&
+        splashLocation?.longitude
+      ) {
+        newChefData.location = {
+          type: "Point",
+          coordinates: [splashLocation.longitude, splashLocation.latitude],
+          address: splashLocation.address || null,
         };
-      });
-    } else {
-      setChefData(prev => ({
-        ...prev,
-        ...updatedData,
-        menuItems: normalizeMenuItems(updatedData.menuItems || prev.menuItems),
-        food_styles: normalizeFoodStyles(updatedData.food_styles || prev.food_styles),
-        phone_number: updatedData.phone_number || prev.phone_number, // ✅ ensure phone updates
-      }));
+      }
+
+      // Update food styles via backend if present
+      if (updatedFields.food_styles) {
+        const response = await ChefService.updateChefFoodStyle(updatedFields.food_styles);
+        if (response?.updated) {
+          newChefData.food_styles = response.updated.food_styles;
+        }
+      }
+
+      // Update profile image if changed
+      if (updatedFields.profile_image && updatedFields.profile_image !== chefData.profile_image) {
+        const formData = new FormData();
+        formData.append("profile_image", {
+          uri: updatedFields.profile_image,
+          type: "image/jpeg",
+          name: "profile.jpg",
+        });
+        const res = await ChefService.updateProfile(formData);
+        if (res?.updated) {
+          newChefData.profile_image = res.updated.photo_url
+            ? `${BASE_URL}${res.updated.photo_url}`
+            : newChefData.profile_image;
+        }
+      }
+
+      // Save updated data to context and AsyncStorage
+      setChefData(newChefData);
+      await AsyncStorage.setItem("chef_data", JSON.stringify(newChefData));
+
+      return newChefData;
+    } catch (err) {
+      console.error("Error updating chef data:", err);
+      throw err;
     }
   };
 
-  const addMenuItem = (newItem) => {
-    setChefData(prev => ({
-      ...prev,
-      menuItems: [...(prev.menuItems || []), { ...newItem, id: newItem.id || newItem._id }],
-    }));
+  // -----------------------
+  // Add menu item
+  // -----------------------
+  const addMenuItemToContext = async (newItem) => {
+    try {
+      const updatedMenu = [...chefData.menuItems, newItem];
+      const newChefData = { ...chefData, menuItems: updatedMenu };
+      setChefData(newChefData);
+      await AsyncStorage.setItem("chef_data", JSON.stringify(newChefData));
+    } catch (err) {
+      console.error("Error adding menu item to context:", err);
+    }
   };
 
-  const updateMenuItem = (updatedItem) => {
-    setChefData(prev => ({
-      ...prev,
-      menuItems: (prev.menuItems || []).map(item =>
-        item.id === (updatedItem.id || updatedItem._id)
-          ? { ...item, ...updatedItem, id: updatedItem.id || updatedItem._id }
-          : item
-      ),
-    }));
+  // -----------------------
+  // Logout chef
+  // -----------------------
+  const logoutChef = async () => {
+    setChefData({
+      id: null,
+      name: "",
+      phone_number: "",
+      email: "",
+      native_place: "",
+      aadhar_number: "",
+      food_styles: [],
+      profile_image: null,
+      menuItems: [],
+      location: { type: "Point", coordinates: [], address: null },
+      role: "chef",
+      photo_url: null,
+    });
+    setToken(null);
+    setIsLoggedIn(false);
+    setIsNewChef(false);
+    await AsyncStorage.removeItem("chef_token");
+    await AsyncStorage.removeItem("chef_data");
+    await AsyncStorage.removeItem("chef_is_new");
   };
-
-  const getChefId = () => chefData?.id || chefData?._id || null;
 
   return (
     <ChefContext.Provider
@@ -133,14 +210,14 @@ export const ChefProvider = ({ children }) => {
         chefData,
         token,
         isLoggedIn,
+        isNewChef,
         loading,
         loginChef,
         logoutChef,
-        updateChef,
-        updateChefProfile,
-        addMenuItem,
-        updateMenuItem,
-        getChefId,
+        setChefData,
+        addMenuItemToContext,
+            updateChef: updateChefData, // ✅ add this line
+
       }}
     >
       {children}

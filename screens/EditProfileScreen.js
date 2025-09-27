@@ -1,21 +1,31 @@
 // EditProfileScreen.js
 import React, { useState, useEffect, useContext } from "react";
 import {
-  View, Text, StyleSheet, Image, TextInput, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Modal, Alert
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Modal,
+  Alert,
 } from "react-native";
 import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import ImageResizer from "react-native-image-resizer";
 
 import { ChefContext } from "../context/ChefContext";
-import { updateChefProfile } from "../services/profileService";
+import { LocationContext } from "../context/LocationContext"; // Pre-fetched location
 
 const EditProfileScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { chefData, updateChef, token } = useContext(ChefContext);
+  const { chefData, updateChefData, token } = useContext(ChefContext);
+  const { location: splashLocation } = useContext(LocationContext);
 
   const [imageUri, setImageUri] = useState(chefData?.profile_image || null);
   const [name, setName] = useState(chefData?.name || "");
@@ -28,7 +38,7 @@ const EditProfileScreen = () => {
   const [errors, setErrors] = useState({});
   const [pickerVisible, setPickerVisible] = useState(false);
 
-  // Load updated food styles from AddFoodStyleScreen
+  // Update food styles from AddFoodStyleScreen
   useEffect(() => {
     if (route.params?.updatedFoodStyle) {
       const updated = Array.isArray(route.params.updatedFoodStyle)
@@ -38,6 +48,21 @@ const EditProfileScreen = () => {
     }
   }, [route.params?.updatedFoodStyle]);
 
+  // Pre-fill location from splash
+  useEffect(() => {
+    if (
+      splashLocation &&
+      (!chefData.location || !chefData.location.coordinates.length)
+    ) {
+      chefData.location = {
+        type: "Point",
+        coordinates: [splashLocation.longitude, splashLocation.latitude],
+        address: splashLocation.address || "",
+      };
+    }
+  }, [splashLocation]);
+
+  // Compress image
   const compressImage = async (uri) => {
     try {
       const resized = await ImageResizer.createResizedImage(uri, 800, 800, "JPEG", 80);
@@ -50,24 +75,19 @@ const EditProfileScreen = () => {
 
   const chooseCamera = async () => {
     launchCamera({ mediaType: "photo" }, async (res) => {
-      if (res?.assets?.length) {
-        const compressedUri = await compressImage(res.assets[0].uri);
-        setImageUri(compressedUri);
-      }
+      if (res?.assets?.length) setImageUri(await compressImage(res.assets[0].uri));
       setPickerVisible(false);
     });
   };
 
   const chooseGallery = async () => {
     launchImageLibrary({ mediaType: "photo" }, async (res) => {
-      if (res?.assets?.length) {
-        const compressedUri = await compressImage(res.assets[0].uri);
-        setImageUri(compressedUri);
-      }
+      if (res?.assets?.length) setImageUri(await compressImage(res.assets[0].uri));
       setPickerVisible(false);
     });
   };
 
+  // Validation
   const validate = () => {
     const newErrors = {};
     if (!name.trim()) newErrors.name = "Please enter your name";
@@ -76,10 +96,17 @@ const EditProfileScreen = () => {
     if (!nativePlace.trim()) newErrors.nativePlace = "Please enter native place";
     if (!aadhaar.trim() || aadhaar.length !== 12) newErrors.aadhaar = "Enter a valid 12-digit Aadhaar";
     if (!foodStyle.length) newErrors.foodStyle = "Please select food style";
+    if (!imageUri) newErrors.image = "Please select a profile image";
+
+    if (!chefData.location || !Array.isArray(chefData.location.coordinates) || chefData.location.coordinates.length !== 2) {
+      newErrors.location = "Location not found. Please restart app.";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
+  // Save handler
   const handleSave = async () => {
     if (!validate()) return;
     setLoading(true);
@@ -90,45 +117,24 @@ const EditProfileScreen = () => {
         return;
       }
 
-      const formData = new FormData();
-      formData.append("name", name);
-      formData.append("phone_number", mobile);
-      formData.append("email", email);
-      formData.append("native_place", nativePlace);
-      formData.append("aadhar_number", aadhaar);
-      foodStyle.forEach((style) => formData.append("food_styles[]", style));
+      const updatedFields = {
+        name,
+        phone_number: mobile,
+        email,
+        native_place: nativePlace,
+        aadhar_number: aadhaar,
+        food_styles: foodStyle,
+        profile_image: imageUri,
+        location: chefData.location,
+      };
 
-      // ✅ Append image only if it's local (not URL)
-      if (imageUri && !imageUri.startsWith("http")) {
-        const filename = imageUri.split("/").pop();
-        const type = /\.(\w+)$/.exec(filename)?.[1]
-          ? `image/${/\.(\w+)$/.exec(filename)[1]}`
-          : "image/jpeg";
-        formData.append("profile_image", { uri: imageUri, name: filename, type });
-      }
+      await updateChefData(updatedFields);
 
-      const data = await updateChefProfile(formData, token);
-      const updatedChef = data.updated;
-
-      // ✅ Update ChefContext with returned photo_url
-     updateChef({
-  ...chefData,
-  name: updatedChef.name?.trim(),
-  email: updatedChef.email?.trim(),
-  phone_number: updatedChef.phone_number?.trim(), // ✅ added
-  native_place: updatedChef.native_place?.trim(),
-  aadhar_number: updatedChef.aadhar_number?.trim(),
-  food_styles: updatedChef.food_styles || foodStyle,
-  profile_image: updatedChef.photo_url || imageUri,
-});
-
-
-      Alert.alert("Success", data.message || "Profile updated successfully!");
-      navigation.navigate("HomeTabs", { screen: "Profile" });
-
+      Alert.alert("Success", "Profile updated successfully!");
+      navigation.reset({ index: 0, routes: [{ name: "HomeTabs" }] });
     } catch (error) {
-      console.error("Profile update error:", error.message);
-      setErrors({ general: error.response?.data?.detail || "Something went wrong. Please try again." });
+      console.error("Profile update error:", error);
+      setErrors({ general: error.message || "Something went wrong. Please try again." });
     } finally {
       setLoading(false);
     }
@@ -153,26 +159,25 @@ const EditProfileScreen = () => {
     </View>
   );
 
-  if (loading) return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#0A3E73" />
-      <Text style={{ marginTop: 10, color: "#0A3E73" }}>Updating Profile...</Text>
-    </View>
-  );
+  if (loading)
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0A3E73" />
+        <Text style={{ marginTop: 10, color: "#0A3E73" }}>Updating Profile...</Text>
+      </View>
+    );
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 80 }}>
         <View style={styles.imageContainer}>
-          <Image
-            source={imageUri ? { uri: imageUri } : require("../assets/default_avatar.png")}
-            style={styles.profileImage}
-          />
+          <Image source={imageUri ? { uri: imageUri } : require("../assets/default_avatar.png")} style={styles.profileImage} />
           <TouchableOpacity style={styles.editIcon} onPress={() => setPickerVisible(true)}>
             <Text style={{ color: "#fff", fontWeight: "bold" }}>✎</Text>
           </TouchableOpacity>
         </View>
 
+        {errors.image && <Text style={styles.errorText}>{errors.image}</Text>}
         {renderField("Full Name", name, setName, "Enter Full Name", "default", 50, "name")}
         {renderField("Mobile Number", mobile, (t) => /^\d{0,10}$/.test(t) && setMobile(t), "10-digit number", "phone-pad", 10, "mobile")}
         {renderField("Email", email, setEmail, "Enter Email", "email-address", 100, "email")}
@@ -181,7 +186,10 @@ const EditProfileScreen = () => {
 
         <View style={styles.fieldWrapper}>
           <Text style={styles.label}>Food Style</Text>
-          <TouchableOpacity style={[styles.input, errors.foodStyle && styles.inputError, { justifyContent: "center" }]} onPress={() => navigation.navigate("AddFoodStyle")}>
+          <TouchableOpacity
+            style={[styles.input, errors.foodStyle && styles.inputError, { justifyContent: "center" }]}
+            onPress={() => navigation.navigate("AddFoodStyle")}
+          >
             <Text style={{ color: foodStyle?.length ? "#000" : "#999" }}>
               {foodStyle?.join(", ") || "Tap to select Food Style"}
             </Text>

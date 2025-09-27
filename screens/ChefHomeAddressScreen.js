@@ -12,10 +12,10 @@ import {
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import Geolocation from "@react-native-community/geolocation";
 import { ChefContext } from "../context/ChefContext";
-import { updateLocation, getAddressFromCoords } from "../services/LocationService";
+import { LocationAPI } from "../services/api";   // ✅ FIXED
 
 const ChefHomeAddressScreen = ({ navigation }) => {
-  const { token, updateChef } = useContext(ChefContext);
+  const { updateChef } = useContext(ChefContext);
   const [coords, setCoords] = useState(null);
   const [address, setAddress] = useState({ fullAddress: "", flat: "", landmark: "", area: "" });
   const [loading, setLoading] = useState(true);
@@ -53,7 +53,6 @@ const ChefHomeAddressScreen = ({ navigation }) => {
       async (position) => {
         let { latitude, longitude } = position.coords;
 
-        // Clamp within Bengaluru
         latitude = Math.max(BENGALURU_BOUND.minLat, Math.min(latitude, BENGALURU_BOUND.maxLat));
         longitude = Math.max(BENGALURU_BOUND.minLng, Math.min(longitude, BENGALURU_BOUND.maxLng));
 
@@ -61,12 +60,10 @@ const ChefHomeAddressScreen = ({ navigation }) => {
         setLoading(false);
 
         try {
-          if (token) {
-            const res = await updateLocation(latitude, longitude, token);
-            setStatus(res?.message || "✅ Location updated");
-          }
+          const res = await LocationAPI.updateLocation(latitude, longitude);
+          setStatus(res?.message || "✅ Location updated");
 
-          const fullAddress = await getAddressFromCoords(latitude, longitude);
+          const fullAddress = await LocationAPI.getAddressFromCoords(latitude, longitude);
           setAddress(prev => ({ ...prev, fullAddress }));
         } catch (err) {
           console.error("❌ Backend/location fetch failed:", err);
@@ -87,15 +84,14 @@ const ChefHomeAddressScreen = ({ navigation }) => {
   useEffect(() => {
     fetchLocation();
     return () => { if (watchId !== null) Geolocation.clearWatch(watchId); };
-  }, [token]);
+  }, []);
 
   const confirmLocation = async () => {
     if (!coords) return;
     try {
-      const res = await updateLocation(coords.latitude, coords.longitude, token);
+      const res = await LocationAPI.updateLocation(coords.latitude, coords.longitude);
       console.log("Confirmed location:", res);
 
-      // Update context
       updateChef(prev => ({
         ...prev,
         location: {
@@ -149,7 +145,7 @@ const ChefHomeAddressScreen = ({ navigation }) => {
                 setStatus("📍 Location updated on map");
 
                 try {
-                  const fullAddress = await getAddressFromCoords(latitude, longitude);
+                  const fullAddress = await LocationAPI.getAddressFromCoords(latitude, longitude);
                   setAddress(prev => ({ ...prev, fullAddress }));
                 } catch (err) {
                   console.error("❌ getAddressFromCoords error:", err);

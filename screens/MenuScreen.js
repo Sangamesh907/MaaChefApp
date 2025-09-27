@@ -15,23 +15,11 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { ChefContext } from '../context/ChefContext';
-import {
-  toggleMenuItemStatus,
-  deleteMenuItem,
-  deleteAllMenuItems,
-} from '../services/menuService';
-import { getChefProfile } from '../services/chefService';
+import MenuAPI from '../services/api'; // ✅ Menu API
 
 export default function MenuScreen() {
   const navigation = useNavigation();
-  const {
-    chefData,
-    token,
-    updateChef,
-    addMenuItem,
-    updateMenuItem,
-    fetchChefData,
-  } = useContext(ChefContext);
+  const { chefData, fetchChefData, updateChef } = useContext(ChefContext);
 
   const [selectedServiceType, setSelectedServiceType] = useState('Breakfast');
   const [modalVisible, setModalVisible] = useState(false);
@@ -39,25 +27,22 @@ export default function MenuScreen() {
 
   const serviceTypes = ['Breakfast', 'Lunch', 'Dinner'];
 
-  // ✅ Refresh menu whenever screen is focused
+  // Refresh menu whenever screen is focused
   useFocusEffect(
     React.useCallback(() => {
-      if (token) fetchChefData?.();
-    }, [token])
+      fetchChefData?.();
+    }, [])
   );
 
-  // ✅ Filter items by service type
   const filteredItems = useMemo(() => {
     const menuItems = Array.isArray(chefData?.menuItems) ? chefData.menuItems : [];
     return menuItems.filter(item => item.service_type === selectedServiceType);
   }, [chefData?.menuItems, selectedServiceType]);
 
-  // ✅ Toggle availability with rollback
   const handleToggleStatus = async (itemId) => {
     const originalItem = chefData?.menuItems?.find(i => i.id === itemId);
     if (!originalItem) return;
 
-    // Optimistic update
     updateChef({
       menuItems: chefData.menuItems.map(item =>
         item.id === itemId ? { ...item, is_available: !item.is_available } : item
@@ -65,9 +50,8 @@ export default function MenuScreen() {
     });
 
     try {
-      await toggleMenuItemStatus(itemId, !originalItem.is_available, token);
+      await MenuAPI.updateMenuItem(itemId, { is_available: !originalItem.is_available });
     } catch (error) {
-      // rollback
       updateChef({ menuItems: chefData.menuItems });
       Alert.alert('Error', 'Failed to update item status.');
     }
@@ -81,7 +65,7 @@ export default function MenuScreen() {
   const handleDeleteItem = async () => {
     if (!selectedItem) return;
     try {
-      await deleteMenuItem(selectedItem.id, token);
+      await MenuAPI.deleteItem(selectedItem.id);
       updateChef({
         menuItems: chefData.menuItems.filter(i => i.id !== selectedItem.id),
       });
@@ -101,7 +85,7 @@ export default function MenuScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteAllMenuItems(token);
+            await MenuAPI.deleteAll();
             updateChef({ menuItems: [] });
             setModalVisible(false);
             setSelectedItem(null);
@@ -150,14 +134,6 @@ export default function MenuScreen() {
             <Icon name="options-outline" size={20} color="#750656" />
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* Location */}
-      <View style={styles.locationContainer}>
-        <Text style={{ fontWeight: '600', fontSize: 16 }}>📍 Your Location:</Text>
-        <Text style={{ fontSize: 14, color: '#555' }}>
-          {chefData?.location?.fullAddress || 'Location not set'}
-        </Text>
       </View>
 
       {/* Service Tabs */}
@@ -241,7 +217,6 @@ const styles = StyleSheet.create({
   headerText: { fontSize: 20, fontWeight: 'bold', color: '#000' },
   subHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, alignItems: 'center' },
   foodStyle: { fontSize: 14, color: '#750656', fontWeight: '500' },
-  locationContainer: { paddingHorizontal: 20, marginTop: 10 },
   tabContainer: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 10 },
   tabButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#F0F0F0' },
   activeTab: { backgroundColor: '#0A3E73' },
