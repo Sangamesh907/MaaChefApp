@@ -1,7 +1,7 @@
 // components/OrderCard.js
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import ChefService from "../services/api";
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Image } from 'react-native';
+import ChefService, { BASE_URL } from "../services/api";
 
 export default function OrderCard({ order, onViewDetails, onRespond }) {
   const [loading, setLoading] = useState(false);
@@ -29,15 +29,31 @@ export default function OrderCard({ order, onViewDetails, onRespond }) {
   const isOngoing = ["chef_accepted", "preparing", "ready"].includes(order.status);
   const isDelivered = ["completed", "delivered"].includes(order.status);
 
+  // ✅ Always try both sources for customer data (user_details or user)
+  const customer = order.user_details || order.user || {};
+  const customerName = customer.name || order.name || 'Unknown';
+  const customerPhoto = customer.photo_url
+    ? `${BASE_URL}${customer.photo_url}`
+    : 'https://i.pravatar.cc/150?u=' + (customer._id || Math.random());
+
   return (
     <View style={styles.card}>
+      {/* Card Header */}
       <View style={styles.row}>
-        <Text style={styles.name}>{order.customer_name || 'Unknown'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Image
+            source={{ uri: customerPhoto }}
+            style={styles.avatar}
+          />
+          <Text style={styles.name}>{customerName}</Text>
+        </View>
+
         <TouchableOpacity>
           <Text style={styles.help}>Help</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Order Info */}
       <Text style={styles.time}>{order.created_at ? new Date(order.created_at).toLocaleString() : '-'}</Text>
       <Text style={styles.cuisine}>
         Cuisine: <Text style={styles.cuisineValue}>{order.cuisine || '-'}</Text>
@@ -46,6 +62,7 @@ export default function OrderCard({ order, onViewDetails, onRespond }) {
         Items: {(order.items || []).map(i => i.food_name || i.name).join(', ')}
       </Text>
 
+      {/* Buttons */}
       <View style={styles.row}>
         {isNew && (
           <>
@@ -67,22 +84,8 @@ export default function OrderCard({ order, onViewDetails, onRespond }) {
           </>
         )}
 
-        {isOngoing && (
+        {(isOngoing || isDelivered) && (
           <>
-            <TouchableOpacity style={styles.inProcess}>
-              <Text style={styles.inProcessText}>In Process</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.accept} onPress={() => onViewDetails(order)}>
-              <Text style={styles.acceptText}>View Details</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {isDelivered && (
-          <>
-            <TouchableOpacity style={styles.delivered}>
-              <Text style={styles.deliveredText}>Delivered</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.accept} onPress={() => onViewDetails(order)}>
               <Text style={styles.acceptText}>View Details</Text>
             </TouchableOpacity>
@@ -95,9 +98,10 @@ export default function OrderCard({ order, onViewDetails, onRespond }) {
 
 const styles = StyleSheet.create({
   card: { margin: 10, padding: 14, borderRadius: 10, backgroundColor: '#fff', elevation: 3 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  name: { fontSize: 16, fontWeight: '600' },
-  time: { fontSize: 13, color: '#777', marginVertical: 4 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 10, backgroundColor: '#eee' },
+  name: { fontSize: 16, fontWeight: '600', color: '#333' },
+  time: { fontSize: 13, color: '#777', marginBottom: 4 },
   cuisine: { fontSize: 13 },
   cuisineValue: { color: '#750656', fontWeight: '600' },
   items: { fontSize: 13, color: '#000', marginBottom: 10 },
@@ -106,8 +110,4 @@ const styles = StyleSheet.create({
   rejectText: { color: '#750656', fontWeight: '600' },
   accept: { backgroundColor: '#DFF3EC', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, marginLeft: 10 },
   acceptText: { color: '#000', fontWeight: '600' },
-  inProcess: { borderWidth: 1, borderColor: '#04aa6d', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  inProcessText: { color: '#04aa6d', fontWeight: '600' },
-  delivered: { borderWidth: 1, borderColor: '#000', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  deliveredText: { color: '#000', fontWeight: '600' },
 });

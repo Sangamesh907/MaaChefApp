@@ -54,76 +54,77 @@ const AddNewItemScreen = () => {
       Alert.alert("Error", "Failed to pick or resize image.");
     }
   };
-
   const handleSave = async () => {
-    if (!foodName || !foodStyle || !foodType || !quantity || !price || !serviceType) {
-      Alert.alert("Validation Error", "Please fill all required fields.");
-      return;
+  if (!foodName || !foodStyle || !foodType || !quantity || !price || !serviceType) {
+    Alert.alert("Validation Error", "Please fill all required fields.");
+    return;
+  }
+  if (!token) {
+    Alert.alert("Authentication Error", "You are not logged in.");
+    return;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append("food_name", foodName.trim());
+    formData.append("food_style", foodStyle);
+    formData.append("food_type", foodType);
+    formData.append("quantity", Number(quantity));
+    formData.append("price", Number(price));
+    formData.append("off", offPrice ? Number(offPrice) : 0);
+    formData.append("service_type", serviceType);
+    formData.append("is_available", true);
+
+    if (imageUri) {
+      const filename = imageUri.split("/").pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : "image/jpeg";
+      formData.append("photo", {
+        uri: Platform.OS === "android" ? imageUri : imageUri.replace("file://", ""),
+        type,
+        name: filename,
+      });
     }
-    if (!token) {
-      Alert.alert("Authentication Error", "You are not logged in.");
-      return;
+
+    let data;
+    if (editingItem) {
+      data = await ChefService.updateMenuItem(editingItem.id, formData);
+    } else {
+      data = await ChefService.addMenuItem(formData);
     }
 
-    try {
-      const formData = new FormData();
-      formData.append("food_name", foodName.trim());
-      formData.append("food_style", foodStyle);
-      formData.append("food_type", foodType);
-      formData.append("quantity", Number(quantity));
-      formData.append("price", Number(price));
-      formData.append("off", offPrice ? Number(offPrice) : 0);
-      formData.append("service_type", serviceType);
-      formData.append("is_available", true);
+    // Normalize item for context
+    const newItem = {
+      id: data.item_id || editingItem?.id,
+      food_name: foodName.trim(),
+      food_style: foodStyle,
+      food_type: foodType,
+      quantity: Number(quantity),
+      price: Number(price),
+      off_price: offPrice ? Number(offPrice) : 0,
+      service_type: serviceType,
+      photo: imageUri, // replace with data.photo if API returns URL
+      is_available: true,
+    };
 
-      if (imageUri) {
-        const filename = imageUri.split("/").pop();
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : "image/jpeg";
-        formData.append("photo", {
-          uri: Platform.OS === "android" ? imageUri : imageUri.replace("file://", ""),
-          type,
-          name: filename,
-        });
-      }
-
-      let data;
-      if (editingItem) {
-        data = await ChefService.updateMenuItem(editingItem.id, formData);
-      } else {
-        data = await ChefService.addMenuItem(formData);
-      }
-
-      const newItem = {
-        id: data.item_id || editingItem?.id,
-        foodName,
-        foodStyle,
-        foodType,
-        quantity,
-        price,
-        offPrice,
-        serviceType,
-        imageUri,
-      };
-
-      // ✅ Update context
-      if (editingItem) {
-        // Replace the edited item in menuItems
-        updateChef({
-          menuItems: updateMenuItemInContext(editingItem.id, newItem),
-        });
-      } else {
-        // Add new item to context
-        addMenuItemToContext(newItem);
-      }
-
-      Alert.alert("Success", editingItem ? "Item Updated" : "Item Added");
-      navigation.goBack();
-    } catch (error) {
-      console.error("Network error:", error);
-      Alert.alert("Error", "A network error occurred.");
+    if (editingItem) {
+      updateChef({
+        menuItems: chefData.menuItems.map(item =>
+          item.id === editingItem.id ? newItem : item
+        ),
+      });
+    } else {
+      addMenuItemToContext(newItem);
     }
-  };
+
+    Alert.alert("Success", editingItem ? "Item Updated" : "Item Added");
+    navigation.goBack();
+  } catch (error) {
+    console.error("Network error:", error);
+    Alert.alert("Error", "A network error occurred.");
+  }
+};
+
 
   // Helper to update item in context
   const updateMenuItemInContext = (id, updatedItem) => {

@@ -17,6 +17,9 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { ChefContext } from '../context/ChefContext';
 import MenuAPI from '../services/api'; // ✅ Menu API
 
+const BRAND_COLOR = '#750656';
+const LIGHT_BG = '#FCFCFD';
+
 export default function MenuScreen() {
   const navigation = useNavigation();
   const { chefData, fetchChefData, updateChef } = useContext(ChefContext);
@@ -102,59 +105,58 @@ export default function MenuScreen() {
   // Dynamic Styles
   // -------------------------------
   const dynamicStyles = useMemo(() => ({
-    headerText: { 
-      fontSize: 20, 
-      fontWeight: 'bold', 
-      color: chefData?.food_styles?.includes('Spicy') ? '#FF4500' : '#000' 
-    },
     tabButton: (type) => ({
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 20,
-      backgroundColor: selectedServiceType === type
-        ? chefData?.food_styles?.includes('Sweet') ? '#FF69B4' : '#0A3E73'
-        : '#F0F0F0',
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 25,
+      backgroundColor: selectedServiceType === type ? BRAND_COLOR : '#F3E6F1',
+      elevation: selectedServiceType === type ? 3 : 0,
     }),
     tabText: (type) => ({
-      color: selectedServiceType === type ? '#fff' : '#555',
-      fontWeight: '500',
+      color: selectedServiceType === type ? '#fff' : BRAND_COLOR,
+      fontWeight: '600',
+      fontSize: 15,
     }),
     itemCard: (item) => ({
       flexDirection: 'row',
       alignItems: 'center',
       marginBottom: 15,
-      backgroundColor: item.is_available ? '#E6FFFA' : '#fff', // Available items highlighted
-      padding: 12,
-      borderRadius: 10,
+      backgroundColor: '#fff',
+      padding: 14,
+      borderRadius: 15,
       shadowColor: '#000',
-      shadowOpacity: 0.05,
+      shadowOpacity: 0.08,
       shadowRadius: 5,
-      elevation: 2,
+      elevation: 3,
     }),
     itemName: (item) => ({
       fontSize: 16,
       fontWeight: '600',
-      color: item.is_available ? '#000' : '#888',
+      color: '#222',
     }),
-  }), [chefData, selectedServiceType]);
+  }), [selectedServiceType]);
 
   const renderItem = ({ item }) => (
     <View style={dynamicStyles.itemCard(item)}>
       <Image source={{ uri: item.photo }} style={styles.itemImage} />
-      <View style={{ flex: 1, marginLeft: 10 }}>
+      <View style={{ flex: 1, marginLeft: 12 }}>
         <Text style={dynamicStyles.itemName(item)}>{item.food_name}</Text>
         <Text style={styles.itemDetail}>₹{item.price}</Text>
-        <Text style={styles.itemDetail}>
+        <Text style={styles.itemDetailSmall}>
           {item.food_type} • Qty: {item.quantity}
         </Text>
-        {item.off_price ? <Text style={styles.discountText}>{item.off_price}% OFF</Text> : null}
+        {item.off_price ? (
+          <Text style={styles.discountText}>{item.off_price}% OFF</Text>
+        ) : null}
       </View>
       <Switch
         value={!!item.is_available}
         onValueChange={() => handleToggleStatus(item.id)}
+        thumbColor={item.is_available ? BRAND_COLOR : '#ccc'}
+        trackColor={{ false: '#ddd', true: '#E4CDE1' }}
       />
       <TouchableOpacity onPress={() => openContextMenu(item)}>
-        <Icon name="ellipsis-vertical" size={22} color="#555" style={{ paddingLeft: 10 }} />
+        <Icon name="ellipsis-vertical" size={22} color="#777" style={{ paddingLeft: 10 }} />
       </TouchableOpacity>
     </View>
   );
@@ -163,17 +165,17 @@ export default function MenuScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.headerContainer}>
-        <Text style={dynamicStyles.headerText}>Menu</Text>
-        <View style={styles.subHeader}>
-          <Text style={styles.foodStyle}>
+        <View>
+          <Text style={styles.headerTitle}>Menu</Text>
+          <Text style={styles.subHeaderText}>
             {Array.isArray(chefData?.food_styles) && chefData.food_styles.length > 0
               ? chefData.food_styles.join(', ')
-              : 'My Style'}
+              : 'Your Style'}
           </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('FilterScreen')}>
-            <Icon name="options-outline" size={20} color="#750656" />
-          </TouchableOpacity>
         </View>
+        <TouchableOpacity onPress={() => navigation.navigate('FilterScreen')}>
+          <Icon name="options-outline" size={24} color={BRAND_COLOR} />
+        </TouchableOpacity>
       </View>
 
       {/* Service Tabs */}
@@ -193,9 +195,7 @@ export default function MenuScreen() {
       {filteredItems.length === 0 ? (
         <View style={styles.centerContent}>
           <Image source={require('../assets/bowl.png')} style={styles.bowlImage} />
-          <Text style={styles.createText}>
-            No items found under {selectedServiceType}
-          </Text>
+          <Text style={styles.emptyText}>No items found for {selectedServiceType}</Text>
         </View>
       ) : (
         <FlatList
@@ -203,6 +203,7 @@ export default function MenuScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 20 }}
+          showsVerticalScrollIndicator={false}
         />
       )}
 
@@ -242,31 +243,45 @@ export default function MenuScreen() {
   );
 }
 
-// -------------------------------
-// Static Styles
-// -------------------------------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FCFCFD' },
+  container: { flex: 1, backgroundColor: LIGHT_BG },
   headerContainer: {
     marginTop: Platform.OS === 'android' ? 50 : 70,
     paddingHorizontal: 20,
-    borderBottomWidth: 0.4,
-    borderBottomColor: '#C4C4C4',
     paddingBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: '#fff',
+    borderBottomColor: '#E5E5E5',
+    borderBottomWidth: 1,
   },
-  subHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, alignItems: 'center' },
-  foodStyle: { fontSize: 14, color: '#750656', fontWeight: '500' },
-  tabContainer: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 10 },
-  itemImage: { width: 70, height: 70, borderRadius: 8 },
-  itemDetail: { fontSize: 14, color: '#555' },
-  discountText: { fontSize: 12, color: 'green', fontWeight: '500' },
-  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
-  bowlImage: { width: 150, height: 150, marginBottom: 10 },
-  createText: { fontSize: 16, color: '#888' },
-  fab: { position: 'absolute', bottom: 20, right: 20, backgroundColor: '#0A3E73', padding: 16, borderRadius: 30, elevation: 5 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  modalBox: { width: 250, backgroundColor: '#fff', borderRadius: 10, overflow: 'hidden' },
-  modalOption: { padding: 15, borderBottomWidth: 0.5, borderColor: '#ccc' },
-  modalText: { fontSize: 16, color: '#0A3E73', textAlign: 'center' },
+  headerTitle: { fontSize: 22, fontWeight: '700', color: '#000' },
+  subHeaderText: { fontSize: 14, color: '#750656', marginTop: 3 },
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  itemImage: { width: 70, height: 70, borderRadius: 10 },
+  itemDetail: { fontSize: 15, color: BRAND_COLOR, fontWeight: '600', marginTop: 2 },
+  itemDetailSmall: { fontSize: 13, color: '#666', marginTop: 2 },
+  discountText: { fontSize: 12, color: 'green', fontWeight: '500', marginTop: 4 },
+  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 30 },
+  bowlImage: { width: 130, height: 130, marginBottom: 10 },
+  emptyText: { fontSize: 16, color: '#888', fontWeight: '500' },
+  fab: {
+    position: 'absolute',
+    bottom: 25,
+    right: 25,
+    backgroundColor: BRAND_COLOR,
+    padding: 18,
+    borderRadius: 50,
+    elevation: 6,
+  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalBox: { width: 260, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 5 },
+  modalOption: { padding: 15, borderBottomWidth: 0.6, borderColor: '#ddd' },
+  modalText: { fontSize: 16, color: BRAND_COLOR, textAlign: 'center', fontWeight: '500' },
 });

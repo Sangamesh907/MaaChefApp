@@ -18,6 +18,7 @@ const LoginScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const { loginChef } = useContext(ChefContext);
 
+  // ✅ Make this function async
   const handleLogin = async () => {
     if (phone.length !== 10) {
       Alert.alert('Invalid Number', 'Please enter a valid 10-digit phone number.');
@@ -33,10 +34,25 @@ const LoginScreen = ({ navigation }) => {
         // Save chef + token in context
         await loginChef(loginData.chef, loginData.access_token);
 
-        // ✅ Manual navigation
+        // Navigate to OTP if new chef, else HomeTabs
         if (loginData.new) {
-          // New chef → go to OTP
-          navigation.navigate('OTPScreen', { phone, loginResponse: loginData });
+          // ✅ Navigate inside AuthStack safely
+          navigation.reset({
+            index: 0,
+            routes: [
+              {
+                name: 'Login', // AuthStack root
+                state: {
+                  routes: [
+                    {
+                      name: 'OTPScreen',
+                      params: { phone, loginResponse: loginData },
+                    },
+                  ],
+                },
+              },
+            ],
+          });
         } else {
           // Existing chef → go directly to HomeTabs
           navigation.reset({
@@ -73,18 +89,11 @@ const LoginScreen = ({ navigation }) => {
         />
 
         <TouchableOpacity
-          style={[
-            styles.button,
-            { backgroundColor: phone.length === 10 ? '#910f6a' : '#ccc' },
-          ]}
+          style={[styles.button, { backgroundColor: phone.length === 10 ? '#910f6a' : '#ccc' }]}
           disabled={phone.length !== 10 || loading}
           onPress={handleLogin}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Login</Text>}
         </TouchableOpacity>
       </View>
     </View>

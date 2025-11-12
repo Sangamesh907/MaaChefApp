@@ -111,54 +111,73 @@ export const ChefProvider = ({ children }) => {
   // -----------------------
   // Update chef data (profile, image, food_styles)
   // -----------------------
-  const updateChefData = async (updatedFields) => {
-    try {
-      let newChefData = { ...chefData, ...updatedFields };
+const updateChefData = async (updatedFields, skipApi = false) => {
+  try {
+    let newChefData = { ...chefData, ...updatedFields };
 
-      // Inject splash location if missing
-      if (
-        (!newChefData.location?.coordinates ||
-          newChefData.location.coordinates.length !== 2) &&
-        splashLocation?.latitude &&
-        splashLocation?.longitude
-      ) {
-        newChefData.location = {
-          type: "Point",
-          coordinates: [splashLocation.longitude, splashLocation.latitude],
-          address: splashLocation.address || null,
-        };
-      }
-
-      // Unified API call
-      const res = await ChefService.updateProfile(updatedFields);
-
-      // Merge backend response
-      if (res?.updated) {
-        newChefData = { ...newChefData, ...res.updated };
-
-        // Convert photo_url to full URL if returned
-        if (res.updated.photo_url) {
-          newChefData.profile_image = `${BASE_URL}${res.updated.photo_url}`;
-        }
-      }
-
-      // Save updated data to context & AsyncStorage
-      setChefData(newChefData);
-      await AsyncStorage.setItem("chef_data", JSON.stringify(newChefData));
-
-      return newChefData;
-    } catch (err) {
-      console.error("Error updating chef data:", err);
-      throw err;
+    // Inject splash location if missing
+    if (
+      (!newChefData.location?.coordinates ||
+        newChefData.location.coordinates.length !== 2) &&
+      splashLocation?.latitude &&
+      splashLocation?.longitude
+    ) {
+      newChefData.location = {
+        type: "Point",
+        coordinates: [splashLocation.longitude, splashLocation.latitude],
+        address: splashLocation.address || null,
+      };
     }
-  };
+
+    // ✅ Only call backend if explicitly allowed
+    let res = null;
+    if (!skipApi) {
+      res = await ChefService.updateProfile(updatedFields);
+    }
+
+    // ✅ Merge backend response (if available)
+    if (res?.updated) {
+      newChefData = {
+        ...newChefData,
+        ...res.updated,
+      };
+
+      if (res.updated.photo_url) {
+        newChefData.profile_image = `${BASE_URL}${res.updated.photo_url}`;
+      }
+    }
+
+    // ✅ Save merged data to context & storage
+    setChefData(newChefData);
+    await AsyncStorage.setItem("chef_data", JSON.stringify(newChefData));
+
+    return newChefData;
+  } catch (err) {
+    console.error("Error updating chef data:", err);
+    throw err;
+  }
+};
 
   // -----------------------
   // Add menu item to context
   // -----------------------
-  const addMenuItemToContext = async (newItem) => {
+    const addMenuItemToContext = async (newItem) => {
     try {
-      const updatedMenu = [...chefData.menuItems, newItem];
+      // Normalize the item to match MenuScreen
+      const normalizedItem = {
+        id: newItem.id,
+        food_name: newItem.food_name || newItem.foodName,
+        food_type: newItem.food_type || newItem.foodType,
+        food_style: newItem.food_style || newItem.foodStyle,
+        quantity: Number(newItem.quantity),
+        price: Number(newItem.price),
+        off_price: newItem.off_price || newItem.offPrice || 0,
+        service_type: newItem.service_type || newItem.serviceType,
+        photo: newItem.photo || newItem.imageUri || null,
+        is_available: newItem.is_available !== undefined ? newItem.is_available : true,
+      };
+
+      const updatedMenu = [...chefData.menuItems, normalizedItem];
       const newChefData = { ...chefData, menuItems: updatedMenu };
       setChefData(newChefData);
       await AsyncStorage.setItem("chef_data", JSON.stringify(newChefData));
